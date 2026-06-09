@@ -1,4 +1,6 @@
-import { NavLink, Outlet } from 'react-router-dom';
+import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { useSession } from '../lib/session';
+import Button from '../components/ui/Button';
 
 const navItems = [
   { to: '/app', label: 'Dashboard', end: true },
@@ -9,6 +11,18 @@ const navItems = [
 ];
 
 export default function AppLayout() {
+  const { session, signOut } = useSession();
+  const navigate = useNavigate();
+  const operatorName =
+    (session?.user?.user_metadata?.display_name as string | undefined) ??
+    session?.user?.email ??
+    'operator';
+
+  async function handleSignOut() {
+    await signOut();
+    navigate('/login', { replace: true });
+  }
+
   return (
     <div className="min-h-screen flex">
       <aside className="hidden md:flex w-64 shrink-0 flex-col gap-6 px-5 py-6 border-r border-hair">
@@ -40,6 +54,13 @@ export default function AppLayout() {
             </NavLink>
           ))}
         </nav>
+        <div className="mt-auto flex flex-col gap-3">
+          <div className="pl-label text-text-on-dark-faint">Signed in as</div>
+          <div className="text-cream-200 font-body text-sm break-all">{operatorName}</div>
+          <Button variant="ghost" size="sm" onClick={handleSignOut}>
+            Sign out
+          </Button>
+        </div>
       </aside>
       <main className="flex-1 px-6 md:px-10 py-8">
         <Outlet />
