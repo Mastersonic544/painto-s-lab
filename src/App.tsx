@@ -9,6 +9,7 @@ import Intake from './routes/Intake';
 import Lab from './routes/Lab';
 import LabCart from './routes/LabCart';
 import PieceJob from './routes/PieceJob';
+import Stock from './routes/Stock';
 import Styleguide from './routes/Styleguide';
 import RequireAuth from './components/RequireAuth';
 
@@ -33,6 +34,7 @@ export default function App() {
         <Route path="hub" element={<Hub />} />
         <Route path="cart" element={<LabCart />} />
         <Route path="lab/:cartId" element={<Lab />} />
+        <Route path="stock" element={<Stock />} />
         <Route path="piece/:id" element={<PieceJob />} />
       </Route>
 

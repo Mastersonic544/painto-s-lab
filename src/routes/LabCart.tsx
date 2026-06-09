@@ -19,8 +19,11 @@ import {
 import {
   BasePaint,
   ResolvedRecipe,
+  Shortfall,
   buildRecipeDisplay,
+  computeBaseUsage,
   fetchBasePaints,
+  findShortfalls,
   resolveRecipes,
 } from '../lib/recipes';
 
@@ -140,6 +143,19 @@ export default function LabCart() {
 
   const totalMl = useMemo(() => rollup.reduce((a, r) => a + r.totalMl, 0), [rollup]);
 
+  // PRD §7: at checkout, compare required base-paint volumes against
+  // current_level_ml and surface a low-stock warning naming the color
+  // and the shortfall.
+  const shortfalls: Shortfall[] = useMemo(() => {
+    if (!rollup.length || !bases.length || !recipes.size) return [];
+    const usage = computeBaseUsage(
+      rollup.map((r) => ({ rgbHex: r.rgbHex, volumeMl: r.totalMl })),
+      recipes,
+      bases,
+    );
+    return findShortfalls(usage, bases);
+  }, [rollup, recipes, bases]);
+
   if (cartLoading || items === null) {
     return (
       <div className="min-h-[40vh] grid place-items-center">
@@ -232,6 +248,39 @@ export default function LabCart() {
               </div>
             </Card>
 
+            {shortfalls.length > 0 && (
+              <Card className="!bg-terracotta-soft">
+                <CardHeader>
+                  <CardEyebrow>Low stock warning</CardEyebrow>
+                  <CardTitle>
+                    {shortfalls.length} base{shortfalls.length === 1 ? '' : 's'} below the batch
+                  </CardTitle>
+                </CardHeader>
+                <ul className="flex flex-col gap-2">
+                  {shortfalls.map(({ base, neededMl, shortMl }) => (
+                    <li
+                      key={base.id}
+                      className="flex items-center gap-2 text-text-on-light text-sm"
+                    >
+                      <span
+                        className="h-4 w-4 rounded-full border border-ink-900 shrink-0"
+                        style={{ background: base.rgb_hex }}
+                      />
+                      <span className="flex-1 truncate font-display font-bold">{base.name}</span>
+                      <span className="font-mono text-xs whitespace-nowrap">
+                        need {neededMl.toFixed(1)} ml · short {shortMl.toFixed(1)} ml
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+                <div className="mt-3">
+                  <Link to="/app/stock" className="pl-label text-ink-900 hover:underline">
+                    → top up in Stock
+                  </Link>
+                </div>
+              </Card>
+            )}
+
             <Card>
               <CardHeader>
                 <CardEyebrow>Checkout</CardEyebrow>
@@ -250,6 +299,11 @@ export default function LabCart() {
               >
                 Check out batch
               </Button>
+              {shortfalls.length > 0 && (
+                <p className="pl-label text-text-on-light-muted mt-3">
+                  Checking out anyway is fine — top up before you mix, or accept the shortfall.
+                </p>
+              )}
             </Card>
           </aside>
         </div>

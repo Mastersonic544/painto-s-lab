@@ -230,6 +230,49 @@ export async function resolveRecipes(
   return out;
 }
 
+/**
+ * Sum ml needed per base paint across a list of (hex, ml) targets, using
+ * the resolved recipes. The same helper backs the Lab's stock-impact tab
+ * and the LabCart's pre-checkout shortfall warning.
+ */
+export function computeBaseUsage(
+  targets: Array<{ rgbHex: string; volumeMl: number }>,
+  recipes: Map<string, ResolvedRecipe>,
+  bases: BasePaint[],
+): Map<string, number> {
+  const out = new Map<string, number>();
+  for (const t of targets) {
+    const resolved = recipes.get(t.rgbHex);
+    if (!resolved) continue;
+    const display = buildRecipeDisplay(resolved.steps, t.volumeMl, bases);
+    for (const s of display.steps) {
+      out.set(s.base_paint_id, (out.get(s.base_paint_id) ?? 0) + s.ml);
+    }
+  }
+  return out;
+}
+
+export interface Shortfall {
+  base: BasePaint;
+  neededMl: number;
+  shortMl: number;
+}
+
+/** Bases whose required ml exceeds current_level_ml. */
+export function findShortfalls(
+  usage: Map<string, number>,
+  bases: BasePaint[],
+): Shortfall[] {
+  const out: Shortfall[] = [];
+  for (const base of bases) {
+    const need = usage.get(base.id) ?? 0;
+    if (need > base.current_level_ml) {
+      out.push({ base, neededMl: need, shortMl: need - base.current_level_ml });
+    }
+  }
+  return out.sort((a, b) => b.shortMl - a.shortMl);
+}
+
 export async function fetchAllVerifiedRecipes(): Promise<ColorRecipe[]> {
   const { data, error } = await supabase
     .from('color_recipes')
