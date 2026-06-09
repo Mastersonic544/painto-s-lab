@@ -46,7 +46,10 @@
       "Bash(git -c user.email=koukilouay@icloud.com -c 'user.name=Painto'\\\\''s Lab' commit -q -m 'Add asynchronous generation pipeline *)",
       "Bash(curl -s -o /dev/null -w \"%{http_code} complexity\\\\n\" \"http://localhost:5176/src/lib/complexity.ts\")",
       "Bash(curl -s -o /dev/null -w \"%{http_code} Dropzone\\\\n\" \"http://localhost:5176/src/components/ui/Dropzone.tsx\")",
-      "Bash(git -c user.email=koukilouay@icloud.com -c 'user.name=Painto'\\\\''s Lab' commit -q -m 'Add intake screen and complexity decision *)"
+      "Bash(git -c user.email=koukilouay@icloud.com -c 'user.name=Painto'\\\\''s Lab' commit -q -m 'Add intake screen and complexity decision *)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code} ComparisonSlider\\\\n\" \"http://localhost:5176/src/components/ui/ComparisonSlider.tsx\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code} svgEdits\\\\n\" \"http://localhost:5176/src/lib/svgEdits.ts\")",
+      "Bash(git -c user.email=koukilouay@icloud.com -c 'user.name=Painto'\\\\''s Lab' commit -q -m 'Add preview slider and edit step *)"
     ]
   }
 }
