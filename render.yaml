@@ -1,0 +1,23 @@
+# Render blueprint for the Painto's Lab converter backend.
+# Create the service from the Render dashboard ("New +" -> "Blueprint")
+# pointed at this repo, or copy these settings into a Web Service.
+#
+# Render injects PORT automatically; the server reads it.
+# Set the three secrets below in the Render dashboard (sync: false = not
+# stored in git, you fill them in per environment).
+services:
+  - type: web
+    name: paintos-converter
+    runtime: node
+    plan: free # free sleeps when idle (~30s cold start). Use 'starter' for always-on.
+    buildCommand: npm install
+    startCommand: npm run converter
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: CONVERTER_SECRET
+        sync: false

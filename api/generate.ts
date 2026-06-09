@@ -51,6 +51,35 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const admin = getAdmin();
 
+  // Production path: hand the heavy job to the long-running converter
+  // (Render) so it never hits the serverless timeout. The frontend tracks
+  // the piece via Realtime/poll, so we just need the worker to accept it.
+  const converterUrl = process.env.CONVERTER_URL;
+  if (converterUrl) {
+    try {
+      const resp = await fetch(`${converterUrl.replace(/\/$/, '')}/generate`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-converter-secret': process.env.CONVERTER_SECRET ?? '',
+        },
+        body: JSON.stringify({ pieceId }),
+        signal: AbortSignal.timeout(30_000),
+      });
+      if (!resp.ok) {
+        const text = await resp.text().catch(() => '');
+        throw new Error(`converter ${resp.status}: ${text.slice(0, 200)}`);
+      }
+      return res.status(202).json({ ok: true, forwarded: true });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error(`[generate] forward to converter failed for ${pieceId}:`, message);
+      await markPieceError(admin, pieceId, message);
+      return res.status(502).json({ ok: false, error: message });
+    }
+  }
+
+  // Local / no external converter: run inline (works via the Vite dev bridge).
   try {
     const result = await runGenerationJob(admin, pieceId);
     return res.status(200).json({ ok: true, ...result });
