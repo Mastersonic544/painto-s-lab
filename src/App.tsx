@@ -4,6 +4,8 @@ import AppLayout from './layouts/AppLayout';
 import Landing from './routes/Landing';
 import Login from './routes/Login';
 import Dashboard from './routes/Dashboard';
+import Intake from './routes/Intake';
+import PieceJob from './routes/PieceJob';
 import Styleguide from './routes/Styleguide';
 import RequireAuth from './components/RequireAuth';
 
@@ -24,6 +26,8 @@ export default function App() {
         }
       >
         <Route index element={<Dashboard />} />
+        <Route path="intake" element={<Intake />} />
+        <Route path="piece/:id" element={<PieceJob />} />
       </Route>
 
       {/* Dev-only — Vite tree-shakes this in production builds. */}

@@ -1,3 +1,6 @@
+import { Link } from 'react-router-dom';
+import Button from '../components/ui/Button';
+
 export default function Dashboard() {
   return (
     <div className="flex flex-col gap-6 max-w-container-md">
@@ -21,12 +24,15 @@ export default function Dashboard() {
         </article>
       </div>
 
-      <div className="border-thick border-cream-200 rounded-lg p-6 bg-surface-raised">
+      <div className="border-thick border-cream-200 rounded-lg p-6 bg-surface-raised flex flex-col gap-3 items-start">
         <h2 className="font-display font-bold text-h2 text-cream-50">Next up</h2>
-        <p className="text-cream-200 mt-2">
+        <p className="text-cream-200">
           Image intake, the approval slider, and the verified-recipe loop. The conversion engine is
           the product.
         </p>
+        <Link to="/app/intake">
+          <Button size="md">Start a new piece</Button>
+        </Link>
       </div>
     </div>
   );

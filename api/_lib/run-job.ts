@@ -1,0 +1,207 @@
+// =============================================================
+// Painto's Lab — generation job runner
+// Pure function: given a pieceId, run the conversion pipeline,
+// upload the SVGs, fan out piece_colors, flip status to 'ready'.
+// Shared by:
+//   - api/generate.ts        (Vercel serverless trigger)
+//   - engine/run-job.ts      (CLI / dedicated worker fallback)
+//
+// PRD §5 calls out that k-means on a full image is CPU-heavy and
+// can exceed serverless time limits. We cap the engine's resize
+// aggressively for the serverless path. If/when uploads regularly
+// stretch past the function timeout (60s on Pro, 10s on Hobby),
+// switch the trigger to enqueue work for a dedicated long-running
+// worker — engine/run-job.ts is wired to be that worker as-is.
+// =============================================================
+
+import { SupabaseClient } from '@supabase/supabase-js';
+import { generatePaintByNumbers } from '../../engine/generate';
+import type { Database, PaletteJson } from '../../src/types/db';
+
+const SOURCE_BUCKET = 'source-images';
+const PREVIEW_BUCKET = 'piece-previews';
+const OUTLINE_BUCKET = 'piece-outlines';
+
+export interface RunJobOptions {
+  /** Cap on the long edge of the bitmap before k-means runs. */
+  resizeMaxEdge?: number;
+  /** Engine "remove facets smaller than N points" threshold. */
+  minFacetSize?: number;
+}
+
+export interface RunJobResult {
+  pieceId: string;
+  previewPath: string;
+  outlinePath: string;
+  paletteSize: number;
+  durationMs: number;
+}
+
+/**
+ * Run the engine for one queued piece end-to-end.
+ *
+ * Throws on any unrecoverable error; the caller is expected to
+ * translate that into a piece row update with status='error'.
+ */
+export async function runGenerationJob(
+  admin: SupabaseClient<Database>,
+  pieceId: string,
+  opts: RunJobOptions = {},
+): Promise<RunJobResult> {
+  const startedAt = Date.now();
+
+  // 1. Load the piece and its source image record.
+  const { data: piece, error: pieceErr } = await admin
+    .from('pieces')
+    .select('*')
+    .eq('id', pieceId)
+    .maybeSingle();
+  if (pieceErr) throw new Error(`Load piece: ${pieceErr.message}`);
+  if (!piece) throw new Error(`Piece ${pieceId} not found`);
+
+  if (piece.status !== 'queued') {
+    // Idempotency: refuse to re-process unless explicitly re-queued.
+    throw new Error(`Piece ${pieceId} status is '${piece.status}', not 'queued'`);
+  }
+
+  const { data: source, error: srcErr } = await admin
+    .from('source_images')
+    .select('*')
+    .eq('id', piece.source_image_id)
+    .maybeSingle();
+  if (srcErr) throw new Error(`Load source image: ${srcErr.message}`);
+  if (!source) throw new Error(`Source image ${piece.source_image_id} not found`);
+
+  // 2. Download the source bitmap from storage.
+  const dl = await admin.storage.from(SOURCE_BUCKET).download(source.storage_path);
+  if (dl.error || !dl.data) {
+    throw new Error(`Download source: ${dl.error?.message ?? 'no data'}`);
+  }
+  const buf = Buffer.from(await dl.data.arrayBuffer());
+
+  // 3. Run the engine. The resize cap below is the main lever for
+  // keeping us inside the function timeout — larger images quickly
+  // run past 60s. Larger inputs belong on the dedicated worker.
+  const seed = derivePieceSeed(piece.id);
+  const resizeMaxEdge = opts.resizeMaxEdge ?? 768;
+  const result = await generatePaintByNumbers(buf, {
+    colorCount: piece.color_count,
+    randomSeed: seed,
+    minFacetSize: opts.minFacetSize ?? 24,
+    resizeMaxWidth: resizeMaxEdge,
+    resizeMaxHeight: resizeMaxEdge,
+  });
+
+  // 4. Upload SVGs. Storage paths shadow the piece id so they're
+  // easy to clean up if the piece is deleted later.
+  const previewPath = `${piece.id}/filled.svg`;
+  const outlinePath = `${piece.id}/outline.svg`;
+  const upPreview = await admin.storage
+    .from(PREVIEW_BUCKET)
+    .upload(previewPath, result.filledSvg, {
+      contentType: 'image/svg+xml',
+      upsert: true,
+    });
+  if (upPreview.error) throw new Error(`Upload preview: ${upPreview.error.message}`);
+
+  const upOutline = await admin.storage
+    .from(OUTLINE_BUCKET)
+    .upload(outlinePath, result.outlineSvg, {
+      contentType: 'image/svg+xml',
+      upsert: true,
+    });
+  if (upOutline.error) throw new Error(`Upload outline: ${upOutline.error.message}`);
+
+  // 5. Write the palette JSON and fan out piece_colors. Paint math
+  // (PRD §7) reads area_percentage × canvas area × coats × coverage,
+  // so estimate volumes now while we have the canvas dims handy.
+  const paletteJson: PaletteJson = result.palette.map((p) => ({
+    index: p.index,
+    color: p.hex,
+    areaPercentage: p.areaPercentage,
+    frequency: p.frequency,
+  }));
+
+  const canvasArea = piece.canvas_width_cm * piece.canvas_height_cm; // cm²
+  // Single tunable constant. Calibrate from real painting; safety
+  // margin so we always round up (PRD §7).
+  const COVERAGE_FACTOR_ML_PER_CM2_PER_COAT = 0.05;
+  const SAFETY_MARGIN = 1.15;
+
+  const colorRows = result.palette.map((p) => {
+    const raw =
+      p.areaPercentage * canvasArea * piece.coats * COVERAGE_FACTOR_ML_PER_CM2_PER_COAT * SAFETY_MARGIN;
+    // Round UP — never let a piece run out mid-stroke.
+    const ml = Math.ceil(raw * 100) / 100;
+    return {
+      piece_id: piece.id,
+      color_index: p.index,
+      label: null as string | null,
+      rgb_hex: p.hex,
+      area_percentage: p.areaPercentage,
+      estimated_volume_ml: ml,
+    };
+  });
+
+  // Replace any stragglers from a previous run, then insert fresh.
+  const delCols = await admin.from('piece_colors').delete().eq('piece_id', piece.id);
+  if (delCols.error) throw new Error(`Clear piece_colors: ${delCols.error.message}`);
+
+  if (colorRows.length > 0) {
+    const insCols = await admin.from('piece_colors').insert(colorRows);
+    if (insCols.error) throw new Error(`Insert piece_colors: ${insCols.error.message}`);
+  }
+
+  // 6. Flip status to 'ready'. Anything beyond this point shouldn't
+  // mark the piece as failed — the artifacts are committed.
+  const upd = await admin
+    .from('pieces')
+    .update({
+      status: 'ready',
+      preview_svg_path: previewPath,
+      outline_svg_path: outlinePath,
+      palette_json: paletteJson,
+      error_message: null,
+    })
+    .eq('id', piece.id);
+  if (upd.error) throw new Error(`Mark ready: ${upd.error.message}`);
+
+  return {
+    pieceId: piece.id,
+    previewPath,
+    outlinePath,
+    paletteSize: result.palette.length,
+    durationMs: Date.now() - startedAt,
+  };
+}
+
+/**
+ * Mark a piece as failed. Best-effort: callers shouldn't re-throw
+ * from inside the failure path.
+ */
+export async function markPieceError(
+  admin: SupabaseClient<Database>,
+  pieceId: string,
+  message: string,
+): Promise<void> {
+  try {
+    await admin
+      .from('pieces')
+      .update({ status: 'error', error_message: message.slice(0, 1000) })
+      .eq('id', pieceId);
+  } catch {
+    // Swallow — there's nothing useful to do if even the error
+    // write fails. The original failure has already been logged.
+  }
+}
+
+/** Stable per-piece seed so re-runs are byte-identical. */
+function derivePieceSeed(pieceId: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < pieceId.length; i++) {
+    h ^= pieceId.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  // The engine treats 0 as "use wall clock"; force >= 1.
+  return (h >>> 0) || 1;
+}

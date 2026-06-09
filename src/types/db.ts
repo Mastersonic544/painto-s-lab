@@ -5,7 +5,7 @@
 // generic param on createClient<Database>() lights up everywhere.
 
 export type UserRole = 'operator';
-export type PieceStatus = 'queued' | 'ready' | 'approved' | 'archived';
+export type PieceStatus = 'queued' | 'ready' | 'approved' | 'archived' | 'error';
 export type PieceMode = 'auto' | 'manual';
 export type PieceComplexity = 'simple' | 'normal' | 'complex';
 export type CartStatus = 'open' | 'checked_out';
@@ -56,6 +56,7 @@ export interface Database {
           created_at?: Timestamp;
         };
         Update: Partial<Database['public']['Tables']['profiles']['Insert']>;
+        Relationships: [];
       };
       source_images: {
         Row: {
@@ -73,6 +74,7 @@ export interface Database {
           created_at?: Timestamp;
         };
         Update: Partial<Database['public']['Tables']['source_images']['Insert']>;
+        Relationships: [];
       };
       pieces: {
         Row: {
@@ -91,6 +93,7 @@ export interface Database {
           palette_json: PaletteJson | null;
           created_at: Timestamp;
           approved_at: Timestamp | null;
+          error_message: string | null;
         };
         Insert: {
           id?: UUID;
@@ -108,8 +111,10 @@ export interface Database {
           palette_json?: PaletteJson | null;
           created_at?: Timestamp;
           approved_at?: Timestamp | null;
+          error_message?: string | null;
         };
         Update: Partial<Database['public']['Tables']['pieces']['Insert']>;
+        Relationships: [];
       };
       piece_colors: {
         Row: {
@@ -131,6 +136,7 @@ export interface Database {
           estimated_volume_ml: number;
         };
         Update: Partial<Database['public']['Tables']['piece_colors']['Insert']>;
+        Relationships: [];
       };
       base_paints: {
         Row: {
@@ -152,6 +158,7 @@ export interface Database {
           created_at?: Timestamp;
         };
         Update: Partial<Database['public']['Tables']['base_paints']['Insert']>;
+        Relationships: [];
       };
       color_recipes: {
         Row: {
@@ -171,6 +178,7 @@ export interface Database {
           updated_at?: Timestamp;
         };
         Update: Partial<Database['public']['Tables']['color_recipes']['Insert']>;
+        Relationships: [];
       };
       carts: {
         Row: {
@@ -188,6 +196,7 @@ export interface Database {
           checked_out_at?: Timestamp | null;
         };
         Update: Partial<Database['public']['Tables']['carts']['Insert']>;
+        Relationships: [];
       };
       cart_items: {
         Row: {
@@ -203,6 +212,7 @@ export interface Database {
           quantity?: number;
         };
         Update: Partial<Database['public']['Tables']['cart_items']['Insert']>;
+        Relationships: [];
       };
       mix_tasks: {
         Row: {
@@ -226,6 +236,7 @@ export interface Database {
           completed_at?: Timestamp | null;
         };
         Update: Partial<Database['public']['Tables']['mix_tasks']['Insert']>;
+        Relationships: [];
       };
     };
     Views: Record<string, never>;

@@ -37,7 +37,13 @@
       "Bash(curl -s -o /dev/null -w \"%{http_code} db.ts\\\\n\" \"http://localhost:5175/src/types/db.ts\")",
       "Bash(git -c user.email=koukilouay@icloud.com -c 'user.name=Painto'\\\\''s Lab' commit -q -m 'Add Supabase schema, RLS, storage, and auth *)",
       "Bash(npm view *)",
-      "Bash(npm test *)"
+      "Bash(npm test *)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code} /\\\\n\" http://localhost:5176/)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code} Intake\\\\n\" \"http://localhost:5176/src/routes/Intake.tsx\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code} PieceJob\\\\n\" \"http://localhost:5176/src/routes/PieceJob.tsx\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code} pieces\\\\n\" \"http://localhost:5176/src/lib/pieces.ts\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code} hook\\\\n\" \"http://localhost:5176/src/hooks/usePieceStatus.ts\")",
+      "Bash(git -c user.email=koukilouay@icloud.com -c 'user.name=Painto'\\\\''s Lab' commit -q -m 'Add asynchronous generation pipeline *)"
     ]
   }
 }
