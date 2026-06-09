@@ -1,0 +1,20 @@
+{
+  "name": "paint-by-numbers-generator",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Paint by numbers generator (drake7707/paintbynumbersgenerator, MIT). Vendored for Painto's Lab and wrapped with generate.ts.",
+  "author": "drake7707",
+  "license": "MIT",
+  "type": "commonjs",
+  "scripts": {
+    "test": "tsx test.ts"
+  },
+  "dependencies": {
+    "canvas": "^3.2.0",
+    "minimist": "^1.2.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.7.0",
+    "tsx": "^4.19.1"
+  }
+}

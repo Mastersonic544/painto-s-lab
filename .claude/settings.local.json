@@ -35,7 +35,9 @@
       "Bash(curl -s -o /dev/null -w \"%{http_code} Login.tsx\\\\n\" \"http://localhost:5175/src/routes/Login.tsx\")",
       "Bash(curl -s -o /dev/null -w \"%{http_code} session.tsx\\\\n\" \"http://localhost:5175/src/lib/session.tsx\")",
       "Bash(curl -s -o /dev/null -w \"%{http_code} db.ts\\\\n\" \"http://localhost:5175/src/types/db.ts\")",
-      "Bash(git -c user.email=koukilouay@icloud.com -c 'user.name=Painto'\\\\''s Lab' commit -q -m 'Add Supabase schema, RLS, storage, and auth *)"
+      "Bash(git -c user.email=koukilouay@icloud.com -c 'user.name=Painto'\\\\''s Lab' commit -q -m 'Add Supabase schema, RLS, storage, and auth *)",
+      "Bash(npm view *)",
+      "Bash(npm test *)"
     ]
   }
 }
