@@ -1,18 +1,28 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useSession } from '../lib/session';
+import { CartProvider, useCart } from '../hooks/useCart';
 import Button from '../components/ui/Button';
 
 const navItems = [
   { to: '/app', label: 'Dashboard', end: true },
   { to: '/app/intake', label: 'Intake' },
   { to: '/app/hub', label: 'The Hub' },
-  { to: '/app/cart', label: 'Lab Cart' },
+  { to: '/app/cart', label: 'Lab Cart', showCartCount: true },
   { to: '/app/stock', label: 'Stock' },
 ];
 
 export default function AppLayout() {
+  return (
+    <CartProvider>
+      <Shell />
+    </CartProvider>
+  );
+}
+
+function Shell() {
   const { session, signOut } = useSession();
   const navigate = useNavigate();
+  const { count } = useCart();
   const operatorName =
     (session?.user?.user_metadata?.display_name as string | undefined) ??
     session?.user?.email ??
@@ -44,13 +54,19 @@ export default function AppLayout() {
               className={({ isActive }) =>
                 [
                   'font-display font-semibold text-lg px-3 py-2 rounded-md transition-colors duration-fast',
+                  'flex items-center justify-between gap-2',
                   isActive
                     ? 'bg-mustard text-ink-900'
                     : 'text-cream-200 hover:bg-swamp-600 hover:text-cream-100',
                 ].join(' ')
               }
             >
-              {item.label}
+              <span>{item.label}</span>
+              {item.showCartCount && count > 0 && (
+                <span className="font-mono font-bold text-2xs leading-none px-2 py-1 rounded-pill border-thin border-ink-900 bg-terracotta text-cream-50">
+                  {count}
+                </span>
+              )}
             </NavLink>
           ))}
         </nav>

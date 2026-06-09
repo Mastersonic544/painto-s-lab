@@ -49,7 +49,11 @@
       "Bash(git -c user.email=koukilouay@icloud.com -c 'user.name=Painto'\\\\''s Lab' commit -q -m 'Add intake screen and complexity decision *)",
       "Bash(curl -s -o /dev/null -w \"%{http_code} ComparisonSlider\\\\n\" \"http://localhost:5176/src/components/ui/ComparisonSlider.tsx\")",
       "Bash(curl -s -o /dev/null -w \"%{http_code} svgEdits\\\\n\" \"http://localhost:5176/src/lib/svgEdits.ts\")",
-      "Bash(git -c user.email=koukilouay@icloud.com -c 'user.name=Painto'\\\\''s Lab' commit -q -m 'Add preview slider and edit step *)"
+      "Bash(git -c user.email=koukilouay@icloud.com -c 'user.name=Painto'\\\\''s Lab' commit -q -m 'Add preview slider and edit step *)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code} Hub\\\\n\" \"http://localhost:5176/src/routes/Hub.tsx\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code} cart\\\\n\" \"http://localhost:5176/src/lib/cart.ts\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code} useCart\\\\n\" \"http://localhost:5176/src/hooks/useCart.tsx\")",
+      "Bash(git -c user.email=koukilouay@icloud.com -c 'user.name=Painto'\\\\''s Lab' commit -q -m 'Add the Hub gallery *)"
     ]
   }
 }
