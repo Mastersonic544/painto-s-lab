@@ -12,8 +12,8 @@ if (!url || !anonKey) {
 }
 
 export const supabase = createClient<Database>(
-  url ?? 'http://localhost',
-  anonKey ?? 'anon-placeholder',
+  url || 'http://localhost',
+  anonKey || 'anon-placeholder',
   {
     auth: {
       persistSession: true,

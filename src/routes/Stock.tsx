@@ -15,6 +15,7 @@ import {
   deleteBasePaint,
   isLowStock,
   listBasePaints,
+  seedStarterPaints,
   topUpBasePaint,
   updateBasePaint,
 } from '../lib/stock';
@@ -29,6 +30,20 @@ export default function Stock() {
   const [bases, setBases] = useState<BasePaint[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [dialog, setDialog] = useState<DialogMode>({ kind: 'closed' });
+  const [seeding, setSeeding] = useState(false);
+
+  async function addStarterSet() {
+    setSeeding(true);
+    setError(null);
+    try {
+      await seedStarterPaints();
+      await reload();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSeeding(false);
+    }
+  }
 
   const reload = useCallback(async () => {
     try {
@@ -78,6 +93,9 @@ export default function Stock() {
               {lowCount} low · top up soon
             </Badge>
           )}
+          <Button variant="secondary" onClick={addStarterSet} loading={seeding}>
+            + Starter set
+          </Button>
           <Button onClick={() => setDialog({ kind: 'add' })}>+ Add base paint</Button>
         </div>
       </header>
@@ -93,7 +111,11 @@ export default function Stock() {
           <Spinner size="lg" />
         </div>
       ) : bases.length === 0 ? (
-        <EmptyState onAdd={() => setDialog({ kind: 'add' })} />
+        <EmptyState
+          onAdd={() => setDialog({ kind: 'add' })}
+          onSeed={addStarterSet}
+          seeding={seeding}
+        />
       ) : (
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
           {bases.map((b) => (
@@ -448,7 +470,15 @@ function TopUpDialog({
   );
 }
 
-function EmptyState({ onAdd }: { onAdd: () => void }) {
+function EmptyState({
+  onAdd,
+  onSeed,
+  seeding,
+}: {
+  onAdd: () => void;
+  onSeed: () => void;
+  seeding: boolean;
+}) {
   return (
     <Card>
       <CardHeader>
@@ -456,11 +486,16 @@ function EmptyState({ onAdd }: { onAdd: () => void }) {
         <CardTitle>Stock the shelf</CardTitle>
       </CardHeader>
       <p className="text-text-on-light">
-        Add the colors you mix from: mustard, terracotta, swamp green, the lot. Recipes get sharper
-        as you save more verified mixes.
+        Drop in the basic acrylic starter set to get going, or add your own. Recipes get sharper as
+        you save more verified mixes.
       </p>
-      <div className="mt-4">
-        <Button onClick={onAdd}>+ Add first base</Button>
+      <div className="mt-4 flex flex-wrap gap-3">
+        <Button onClick={onSeed} loading={seeding}>
+          + Add starter set
+        </Button>
+        <Button variant="ghost" onClick={onAdd}>
+          Add one manually
+        </Button>
       </div>
     </Card>
   );

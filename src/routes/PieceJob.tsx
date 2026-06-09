@@ -81,6 +81,7 @@ export default function PieceJob() {
         piece.status === 'archived') && (
         <ReviewArea
           pieceId={piece.id}
+          title={piece.title}
           status={piece.status}
           previewPath={piece.preview_svg_path ?? ''}
           outlinePath={piece.outline_svg_path ?? ''}
@@ -100,6 +101,7 @@ export default function PieceJob() {
 
 function ReviewArea(props: {
   pieceId: string;
+  title: string;
   status: 'ready' | 'approved' | 'archived';
   previewPath: string;
   outlinePath: string;
@@ -354,6 +356,47 @@ function ReviewArea(props: {
     return w / h;
   }, [filledSvg]);
 
+  // ----- Downloads: export the live (edited) SVGs in three modes ----------
+  const ready = Boolean(filledSvg && outlineSvg);
+  const slug =
+    (props.title || 'piece').replace(/[^\w.-]+/g, '-').replace(/^-+|-+$/g, '') || 'piece';
+
+  function svgOf(root: HTMLDivElement | null): SVGSVGElement | null {
+    return (root?.querySelector('svg') as SVGSVGElement | null) ?? null;
+  }
+  function save(filename: string, svgText: string) {
+    const blob = new Blob([svgText], { type: 'image/svg+xml;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+  // 1. Colors only — the finished piece (no borders, no numbers).
+  function downloadColorsOnly() {
+    const el = svgOf(sliderRef.current?.getFilledRoot() ?? null);
+    if (!el) return setFeedback('Preview still loading.');
+    save(`${slug}-colors.svg`, new XMLSerializer().serializeToString(el));
+  }
+  // 2. B&W template — black outline + numbers, no fills (the printable).
+  function downloadTemplate() {
+    const el = svgOf(sliderRef.current?.getOutlineRoot() ?? null);
+    if (!el) return setFeedback('Preview still loading.');
+    save(`${slug}-template.svg`, new XMLSerializer().serializeToString(el));
+  }
+  // 3. Colors + numbers — lay the outline's borders/labels over the fills.
+  function downloadColorsNumbers() {
+    const filled = svgOf(sliderRef.current?.getFilledRoot() ?? null);
+    const outline = svgOf(sliderRef.current?.getOutlineRoot() ?? null);
+    if (!filled || !outline) return setFeedback('Preview still loading.');
+    const composite = filled.cloneNode(true) as SVGSVGElement;
+    outline.childNodes.forEach((n) => composite.appendChild(n.cloneNode(true)));
+    save(`${slug}-colors-numbers.svg`, new XMLSerializer().serializeToString(composite));
+  }
+
   return (
     <div className="grid lg:grid-cols-[1fr_280px] gap-6">
       <div className="flex flex-col gap-4">
@@ -447,6 +490,27 @@ function ReviewArea(props: {
               />
             ))}
           </div>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardEyebrow>Download</CardEyebrow>
+            <CardTitle>Export this piece</CardTitle>
+          </CardHeader>
+          <div className="flex flex-col gap-2">
+            <Button variant="secondary" onClick={downloadTemplate} disabled={!ready}>
+              Outline + numbers (B&amp;W)
+            </Button>
+            <Button variant="secondary" onClick={downloadColorsNumbers} disabled={!ready}>
+              Colors + numbers
+            </Button>
+            <Button variant="secondary" onClick={downloadColorsOnly} disabled={!ready}>
+              Colors only (final)
+            </Button>
+          </div>
+          <p className="pl-label text-text-on-light-muted mt-3">
+            SVG · vector, scales to any print size. Reflects your edits.
+          </p>
         </Card>
 
         <Card>

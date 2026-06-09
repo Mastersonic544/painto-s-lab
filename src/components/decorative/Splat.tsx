@@ -1,4 +1,5 @@
 import { SVGAttributes } from 'react';
+import { cn } from '../../lib/cn';
 
 export type SplatColor =
   | 'mustard'
@@ -31,6 +32,7 @@ export default function Splat({
   color = 'terracotta',
   size = 180,
   outlined = true,
+  className,
   ...rest
 }: SplatProps) {
   const fill = colorVar[color];
@@ -40,6 +42,9 @@ export default function Splat({
       viewBox="0 0 200 200"
       width={size}
       height={size}
+      // Decorative only: never intercept clicks, and sit behind sibling
+      // content so a splat can't drift on top of text and make it unreadable.
+      className={cn('pointer-events-none -z-10', className)}
       {...rest}
     >
       <path

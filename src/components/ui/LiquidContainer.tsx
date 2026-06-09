@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { cn } from '../../lib/cn';
 
 export interface LiquidContainerProps {
@@ -116,6 +116,26 @@ export default function LiquidContainer({
   // Liquid surface Y inside the window (top of liquid).
   const surfaceY = windowY + windowH - (windowH * pct) / 100;
 
+  // Neck/label pill sized to the ACTUAL rendered label width (measured from
+  // the DOM) so long names ("PAINTO'S LAB") can never overflow the pill,
+  // regardless of which font ends up loaded.
+  const labelText = (label ?? '').toUpperCase();
+  const labelLong = labelText.length > 14;
+  const labelFontSize = labelLong ? 11 : 13;
+  const labelSpacing = labelLong ? 1 : 2;
+  // First-paint estimate; replaced by the measured width on layout.
+  const estTextW = labelText.length * (labelFontSize * 0.62 + labelSpacing);
+  const labelRef = useRef<SVGTextElement>(null);
+  const [measuredW, setMeasuredW] = useState<number | null>(null);
+  useLayoutEffect(() => {
+    if (labelRef.current) setMeasuredW(labelRef.current.getComputedTextLength());
+  }, [labelText, labelFontSize, labelSpacing]);
+  const textW = measuredW ?? estTextW;
+  const neckW = Math.max(88, Math.min(VBW - 16, textW + 28));
+  const neckX = (VBW - neckW) / 2;
+  // If the text is wider than the widest possible pill, compress it to fit.
+  const constrainText = textW > neckW - 16;
+
   return (
     <div
       className={cn('inline-flex flex-col items-stretch gap-2', className)}
@@ -140,6 +160,13 @@ export default function LiquidContainer({
               ry="14"
             />
           </clipPath>
+          {/* Glossy sheen: light highlight up top, shadow pooling at the
+              bottom, so the flat fill reads as a 3D body of liquid. */}
+          <linearGradient id="pl-liquid-sheen" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="rgba(255,255,255,0.30)" />
+            <stop offset="42%" stopColor="rgba(255,255,255,0)" />
+            <stop offset="100%" stopColor="rgba(0,0,0,0.32)" />
+          </linearGradient>
         </defs>
 
         {/* Outer shell */}
@@ -154,11 +181,11 @@ export default function LiquidContainer({
           stroke="var(--ink-900)"
           strokeWidth="4"
         />
-        {/* Top neck */}
+        {/* Top neck — width tracks the label so it never overflows */}
         <rect
-          x="56"
+          x={neckX}
           y="14"
-          width={VBW - 112}
+          width={neckW}
           height="34"
           rx="10"
           ry="10"
@@ -169,16 +196,20 @@ export default function LiquidContainer({
         {/* Label band */}
         {label && (
           <text
+            ref={labelRef}
             x={VBW / 2}
             y="40"
             textAnchor="middle"
             fontFamily="var(--font-mono)"
-            fontSize="13"
+            fontSize={labelFontSize}
             fontWeight="700"
-            letterSpacing="2"
+            letterSpacing={labelSpacing}
             fill="var(--ink-900)"
+            {...(constrainText
+              ? { textLength: neckW - 16, lengthAdjust: 'spacingAndGlyphs' as const }
+              : {})}
           >
-            {label.toUpperCase()}
+            {labelText}
           </text>
         )}
         {/* Transparent window (back well) */}
@@ -227,6 +258,15 @@ export default function LiquidContainer({
                 opacity="0.95"
               />
             </g>
+            {/* Sheen overlay — gives the liquid volume without color math */}
+            <rect
+              x={windowX - 20}
+              y={surfaceY}
+              width={windowW + 40}
+              height={windowH + 80}
+              fill="url(#pl-liquid-sheen)"
+              style={{ transition: 'y var(--dur-bloom) var(--ease-drip)' }}
+            />
           </g>
         </g>
         {/* Window outline on top (so liquid sits behind the ink line) */}

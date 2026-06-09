@@ -64,8 +64,14 @@ const ComparisonSlider = forwardRef<ComparisonSliderHandle, ComparisonSliderProp
     // internals so the edit helpers can mutate paths/labels without
     // having to round-trip through component state.
     useEffect(() => {
-      if (filledRef.current) filledRef.current.innerHTML = filledSvg;
-      if (outlineRef.current) outlineRef.current.innerHTML = outlineSvg;
+      if (filledRef.current) {
+        filledRef.current.innerHTML = filledSvg;
+        normalizeSvg(filledRef.current);
+      }
+      if (outlineRef.current) {
+        outlineRef.current.innerHTML = outlineSvg;
+        normalizeSvg(outlineRef.current);
+      }
     }, [filledSvg, outlineSvg]);
 
     const moveTo = useCallback((clientX: number) => {
@@ -148,13 +154,13 @@ const ComparisonSlider = forwardRef<ComparisonSliderHandle, ComparisonSliderProp
             sits on top and clips its left edge to the split point. */}
         <div
           ref={filledRef}
-          className="absolute inset-0 [&>svg]:block [&>svg]:w-full [&>svg]:h-full"
+          className="absolute inset-0 [&>svg]:block [&>svg]:w-full [&>svg]:h-full [&>img]:block [&>img]:w-full [&>img]:h-full [&>img]:object-cover"
           aria-hidden="false"
         />
         {/* Outline (right side). clip-path inset hides everything left of the split. */}
         <div
           ref={outlineRef}
-          className="absolute inset-0 [&>svg]:block [&>svg]:w-full [&>svg]:h-full"
+          className="absolute inset-0 [&>svg]:block [&>svg]:w-full [&>svg]:h-full [&>img]:block [&>img]:w-full [&>img]:h-full [&>img]:object-cover"
           style={{ clipPath: `inset(0 0 0 ${split * 100}%)` }}
           aria-hidden="false"
         />
@@ -210,4 +216,22 @@ export default ComparisonSlider;
 
 function clamp01(v: number) {
   return Math.max(0, Math.min(1, v));
+}
+
+// Make any mounted SVG scale to its box: ensure it has a viewBox (synthesizing
+// one from width/height for older artifacts that lack it), then drop the fixed
+// width/height so the `[&>svg]:w-full h-full` CSS can size it. Without this a
+// 2000px+ engine SVG overflows the studio and only a corner shows.
+function normalizeSvg(host: HTMLElement) {
+  const svg = host.querySelector('svg');
+  if (!svg) return;
+  if (!svg.getAttribute('viewBox')) {
+    const w = parseFloat(svg.getAttribute('width') ?? '');
+    const h = parseFloat(svg.getAttribute('height') ?? '');
+    if (Number.isFinite(w) && Number.isFinite(h)) {
+      svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
+    }
+  }
+  svg.removeAttribute('width');
+  svg.removeAttribute('height');
 }

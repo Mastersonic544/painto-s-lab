@@ -1,4 +1,4 @@
-import { ReactNode } from 'react';
+import { MouseEvent as ReactMouseEvent, ReactNode, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import Button from '../components/ui/Button';
 import Card, { CardEyebrow, CardTitle } from '../components/ui/Card';
@@ -9,7 +9,16 @@ import Pill from '../components/ui/Pill';
 import Blob from '../components/decorative/Blob';
 import Splat from '../components/decorative/Splat';
 import { useInView } from '../hooks/useInView';
-import { DEMO_ASPECT, DEMO_FILLED_SVG, DEMO_OUTLINE_SVG } from '../lib/demoSvgs';
+import { buildRecipeDisplay, estimateRecipeFromBases } from '../lib/recipes';
+import { DEMO_BASES } from '../lib/basePaints';
+
+// Estimate a mix for a swatch on the public page, where the real base_paints
+// table isn't readable. Uses the same estimator the app uses, against the
+// basic acrylic starter set.
+function demoRecipe(hex: string, ml: number) {
+  const steps = estimateRecipeFromBases(hex, DEMO_BASES) ?? [];
+  return buildRecipeDisplay(steps, ml, DEMO_BASES, { kind: 'estimate' });
+}
 
 type Enter = 'splash' | 'drip' | 'bloom';
 
@@ -112,13 +121,7 @@ function Hero() {
 
         <div className="flex justify-center">
           <div className="relative">
-            <LiquidContainer
-              color="var(--mustard)"
-              label="Painto's Lab"
-              capacityMl={500}
-              currentMl={385}
-              width={260}
-            />
+            <HeroTilt />
             <Splat
               color="teal"
               size={120}
@@ -128,6 +131,44 @@ function Hero() {
         </div>
       </div>
     </section>
+  );
+}
+
+// Framed hero photo that tilts in 3D toward the cursor, like a card you can
+// peek around. Falls back to flat (no tilt) on touch / reduced-motion.
+function HeroTilt() {
+  const ref = useRef<HTMLDivElement>(null);
+  const [tilt, setTilt] = useState({ rx: 0, ry: 0 });
+
+  function onMove(e: ReactMouseEvent<HTMLDivElement>) {
+    const el = ref.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    const px = (e.clientX - r.left) / r.width; // 0..1 across
+    const py = (e.clientY - r.top) / r.height; // 0..1 down
+    const MAX = 12; // degrees of swing
+    setTilt({ rx: (0.5 - py) * 2 * MAX, ry: (px - 0.5) * 2 * MAX });
+  }
+
+  return (
+    <div className="[perspective:1100px]">
+      <div
+        ref={ref}
+        onMouseMove={onMove}
+        onMouseLeave={() => setTilt({ rx: 0, ry: 0 })}
+        className="pl-paper pl-sticker p-3 rounded-md will-change-transform transition-transform duration-200 ease-out [transform-style:preserve-3d]"
+        style={{ transform: `rotateX(${tilt.rx}deg) rotateY(${tilt.ry}deg)` }}
+      >
+        <img
+          src="/assets/before.jpg"
+          alt="A source photo ready to become a kit"
+          width={300}
+          draggable={false}
+          className="block w-[300px] max-w-full rounded-sm border-thick border-ink-900 select-none"
+          style={{ aspectRatio: '531 / 600', objectFit: 'cover' }}
+        />
+      </div>
+    </div>
   );
 }
 
@@ -155,9 +196,9 @@ function SliderSection() {
         </div>
         <div className="relative">
           <ComparisonSlider
-            filledSvg={DEMO_FILLED_SVG}
-            outlineSvg={DEMO_OUTLINE_SVG}
-            aspectRatio={DEMO_ASPECT}
+            filledSvg={`<img src="/assets/before.jpg" alt="Original source photo" />`}
+            outlineSvg={`<img src="/assets/after.png" alt="Finished paint by numbers piece" />`}
+            aspectRatio={531 / 600}
             initialSplit={0.55}
           />
           <Blob
@@ -209,9 +250,11 @@ function MixingSection() {
                   >
                     {t.done ? '✓' : ''}
                   </span>
-                  <span
-                    className="h-9 w-9 rounded-md border-thick border-ink-900"
-                    style={{ background: t.hex }}
+                  <ColorChip
+                    hex={t.hex}
+                    size="sm"
+                    recipe={demoRecipe(t.hex, t.ml)}
+                    bases={DEMO_BASES}
                   />
                   <span className="flex-1 font-display font-bold text-text-on-light">
                     {t.label}
@@ -271,7 +314,14 @@ function CartSection() {
             <CardTitle>8 colors · 120 ml total</CardTitle>
             <div className="mt-4 grid grid-cols-4 gap-3">
               {palette.map((p) => (
-                <ColorChip key={p.hex} hex={p.hex} totalMl={p.ml} size="md" />
+                <ColorChip
+                  key={p.hex}
+                  hex={p.hex}
+                  totalMl={p.ml}
+                  size="md"
+                  recipe={demoRecipe(p.hex, p.ml)}
+                  bases={DEMO_BASES}
+                />
               ))}
             </div>
           </Card>

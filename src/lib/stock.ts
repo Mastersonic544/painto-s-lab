@@ -6,8 +6,34 @@
 
 import { supabase } from './supabase';
 import type { Tables } from '../types/db';
+import {
+  BASIC_ACRYLICS,
+  STARTER_CONTAINER_ML,
+  STARTER_REORDER_ML,
+} from './basePaints';
 
 export type BasePaint = Tables<'base_paints'>;
+
+/**
+ * Insert the basic acrylic starter set as placeholders. Idempotent:
+ * `name` is unique, so re-running skips paints already on the shelf.
+ * Returns how many new paints were added.
+ */
+export async function seedStarterPaints(): Promise<number> {
+  const rows = BASIC_ACRYLICS.map((p) => ({
+    name: p.name,
+    rgb_hex: p.rgb_hex,
+    container_capacity_ml: STARTER_CONTAINER_ML,
+    current_level_ml: STARTER_CONTAINER_ML,
+    reorder_threshold_ml: STARTER_REORDER_ML,
+  }));
+  const { data, error } = await supabase
+    .from('base_paints')
+    .upsert(rows, { onConflict: 'name', ignoreDuplicates: true })
+    .select('id');
+  if (error) throw error;
+  return data?.length ?? 0;
+}
 
 export async function listBasePaints(): Promise<BasePaint[]> {
   const { data, error } = await supabase

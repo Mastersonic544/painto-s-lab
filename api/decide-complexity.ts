@@ -19,7 +19,7 @@ export const config = {
 
 type Tier = 'simple' | 'normal' | 'complex';
 
-const DEFAULT_MODEL = 'meta-llama/llama-3.2-11b-vision-instruct:free';
+const DEFAULT_MODEL = 'nvidia/nemotron-nano-12b-v2-vl:free';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });

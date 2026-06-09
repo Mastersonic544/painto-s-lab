@@ -18,12 +18,15 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 const pressClasses =
   'active:scale-[0.96] active:translate-x-[3px] active:translate-y-[3px] active:shadow-sticker-press';
 
+// Pigment buttons use a top-lit gradient (soft → base → deep) so they read as
+// dimensional paint chips rather than flat color blocks.
 const variantClasses: Record<ButtonVariant, string> = {
   primary:
-    'bg-mustard text-ink-900 border-thick border-ink-900 shadow-sticker hover:bg-mustard-soft',
-  secondary: 'bg-teal text-cream-50 border-thick border-ink-900 shadow-sticker hover:bg-teal-soft',
+    'text-ink-900 border-thick border-ink-900 shadow-sticker bg-[linear-gradient(180deg,var(--mustard-soft),var(--mustard)_55%,var(--mustard-deep))] hover:bg-[linear-gradient(180deg,var(--mustard-soft),var(--mustard-soft)_55%,var(--mustard))]',
+  secondary:
+    'text-cream-50 border-thick border-ink-900 shadow-sticker bg-[linear-gradient(180deg,var(--teal-soft),var(--teal)_55%,var(--teal-deep))] hover:bg-[linear-gradient(180deg,var(--teal-soft),var(--teal-soft)_55%,var(--teal))]',
   tertiary:
-    'bg-terracotta text-cream-50 border-thick border-ink-900 shadow-sticker hover:bg-terracotta-soft',
+    'text-cream-50 border-thick border-ink-900 shadow-sticker bg-[linear-gradient(180deg,var(--terracotta-soft),var(--terracotta)_55%,var(--terracotta-deep))] hover:bg-[linear-gradient(180deg,var(--terracotta-soft),var(--terracotta-soft)_55%,var(--terracotta))]',
   ghost:
     'bg-transparent text-cream-200 border-thick border-cream-200 shadow-none hover:bg-swamp-600',
 };

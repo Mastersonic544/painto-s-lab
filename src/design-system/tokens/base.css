@@ -45,12 +45,30 @@ a { color: var(--teal-soft); text-decoration-thickness: 2px; text-underline-offs
 
 /* ---- Texture helpers ------------------------------------- */
 
-/* Subtle paper grain for cream surfaces */
+/* Subtle paper grain for cream surfaces, plus a soft top-down sheen so the
+   card reads as a lit surface rather than a flat fill. */
 .pl-paper {
   background-color: var(--surface-card);
   background-image:
+    linear-gradient(
+      158deg,
+      rgba(255, 255, 255, 0.55) 0%,
+      rgba(255, 255, 255, 0) 40%,
+      rgba(20, 20, 15, 0.05) 100%
+    ),
     radial-gradient(rgba(20, 20, 15, 0.035) 1px, transparent 1px);
-  background-size: 4px 4px;
+  background-size: 100% 100%, 4px 4px;
+}
+
+/* Raised swamp panels on the dark ground — a gentle vertical gradient gives
+   them lift over the flat background. */
+.pl-raised {
+  background-image: linear-gradient(
+    180deg,
+    var(--swamp-500) 0%,
+    var(--swamp-600) 55%,
+    var(--swamp-700) 100%
+  );
 }
 
 /* An eyebrow / mono label */

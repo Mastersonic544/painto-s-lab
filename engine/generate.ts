@@ -255,7 +255,10 @@ function renderSvg(
   const xmlns = 'http://www.w3.org/2000/svg';
   const svgWidth = sizeMultiplier * facetResult.width;
   const svgHeight = sizeMultiplier * facetResult.height;
-  let svg = `<?xml version="1.0" standalone="no"?>\n<svg width="${svgWidth}" height="${svgHeight}" xmlns="${xmlns}">`;
+  // viewBox is essential: without it the SVG won't scale to its display size
+  // (CSS width/height just clips it), so consumers only see a corner of the
+  // full-resolution drawing.
+  let svg = `<?xml version="1.0" standalone="no"?>\n<svg width="${svgWidth}" height="${svgHeight}" viewBox="0 0 ${svgWidth} ${svgHeight}" xmlns="${xmlns}">`;
 
   for (const f of facetResult.facets) {
     if (f == null || f.borderSegments.length === 0) continue;

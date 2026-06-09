@@ -3,10 +3,12 @@ import { Link, useNavigate } from 'react-router-dom';
 import Button from '../components/ui/Button';
 import Card, { CardEyebrow, CardHeader, CardTitle } from '../components/ui/Card';
 import Dropzone from '../components/ui/Dropzone';
+import ImageCropper from '../components/ui/ImageCropper';
 import Input from '../components/ui/Input';
 import Pill from '../components/ui/Pill';
 import Radio from '../components/ui/Radio';
 import Spinner from '../components/ui/Spinner';
+import { CropRect, FULL_CROP, cropImageFile, pxToCanvasCm } from '../lib/image';
 import {
   AlgorithmicScore,
   ComplexityDecision,
@@ -25,18 +27,6 @@ import {
 type Mode = 'auto' | 'manual';
 type Step = 'compose' | 'review' | 'submitting';
 
-interface CanvasPreset {
-  label: string;
-  w: number;
-  h: number;
-}
-const CANVAS_PRESETS: CanvasPreset[] = [
-  { label: '30 × 40', w: 30, h: 40 },
-  { label: '40 × 50', w: 40, h: 50 },
-  { label: '50 × 70', w: 50, h: 70 },
-  { label: '60 × 80', w: 60, h: 80 },
-];
-
 const TIER_LABEL: Record<Tier, string> = {
   simple: 'Simple · 8',
   normal: 'Normal · 16',
@@ -50,9 +40,15 @@ export default function Intake() {
   const [file, setFile] = useState<File | null>(null);
   const [title, setTitle] = useState('');
   const [mode, setMode] = useState<Mode>('auto');
+  // Canvas size is derived automatically from the (cropped) photo, not picked.
   const [canvasW, setCanvasW] = useState<number>(40);
   const [canvasH, setCanvasH] = useState<number>(50);
   const [coats, setCoats] = useState<number>(2);
+  const [crop, setCrop] = useState<CropRect>(FULL_CROP);
+  const [natural, setNatural] = useState<{ w: number; h: number } | null>(null);
+  const [composing, setComposing] = useState(false);
+  // Object URL of the cropped image, shown on the review screen.
+  const [reviewPreview, setReviewPreview] = useState<string | null>(null);
   const [manualTier, setManualTier] = useState<Tier>('normal');
   const [manualCustom, setManualCustom] = useState<number | null>(null);
 
@@ -73,13 +69,33 @@ export default function Intake() {
     };
   }, [previewUrl]);
 
-  function pickPreset(p: CanvasPreset) {
-    setCanvasW(p.w);
-    setCanvasH(p.h);
-  }
+  // Revoke the cropped preview URL when it's replaced or on unmount.
+  useEffect(() => {
+    return () => {
+      if (reviewPreview) URL.revokeObjectURL(reviewPreview);
+    };
+  }, [reviewPreview]);
+
+  // Read the photo's natural pixel size so we can derive the canvas size.
+  useEffect(() => {
+    if (!previewUrl) {
+      setNatural(null);
+      return;
+    }
+    const img = new Image();
+    img.onload = () => setNatural({ w: img.naturalWidth, h: img.naturalHeight });
+    img.src = previewUrl;
+  }, [previewUrl]);
+
+  // Canvas size in cm, derived from the cropped pixel dimensions at 300 DPI.
+  const derivedCm = useMemo(() => {
+    if (!natural) return null;
+    return pxToCanvasCm(natural.w * crop.w, natural.h * crop.h);
+  }, [natural, crop]);
 
   function onFile(next: File) {
     setFile(next);
+    setCrop(FULL_CROP);
     if (!title) setTitle(next.name.replace(/\.[^.]+$/, ''));
   }
 
@@ -90,17 +106,30 @@ export default function Intake() {
       return;
     }
     setError(null);
+    setComposing(true);
 
     try {
+      // Re-cut the photo to the crop, then lock the canvas size to the
+      // cropped pixels (300 DPI). Everything downstream sees the crop only.
+      const { file: cropped, widthPx, heightPx } = await cropImageFile(file, crop);
+      const size = pxToCanvasCm(widthPx, heightPx);
+      setCanvasW(size.w);
+      setCanvasH(size.h);
+      setReviewPreview((prev) => {
+        if (prev) URL.revokeObjectURL(prev);
+        return URL.createObjectURL(cropped);
+      });
+
       // Start the cheap local work immediately so the operator never
       // stares at a blank screen waiting on the upload.
-      const algoPromise = computeAlgorithmicScore(file);
+      const algoPromise = computeAlgorithmicScore(cropped);
 
-      const uploaded = await uploadSourceImage(file);
+      const uploaded = await uploadSourceImage(cropped);
       setSourceImageId(uploaded.sourceImageId);
 
       const algo = await algoPromise;
       setAlgorithmic(algo);
+      setComposing(false);
       setStep('review');
 
       if (mode === 'auto') {
@@ -121,6 +150,7 @@ export default function Intake() {
         setOverrideCount(count);
       }
     } catch (err) {
+      setComposing(false);
       setError(err instanceof Error ? err.message : String(err));
     }
   }
@@ -166,8 +196,8 @@ export default function Intake() {
           Drop in a new piece
         </h1>
         <p className="text-cream-200 mt-2 max-w-lg">
-          Pick an image, set the canvas, and let the lab figure out a color count. Round up, never
-          down.
+          Drop a photo, crop it to taste, and let the lab figure out a color count. The canvas size
+          follows the crop. Round up, never down.
         </p>
       </header>
 
@@ -179,7 +209,23 @@ export default function Intake() {
                 <CardEyebrow>1 · Image</CardEyebrow>
                 <CardTitle>Source photo or painting</CardTitle>
               </CardHeader>
-              <Dropzone onFile={onFile} selected={file} previewUrl={previewUrl} />
+              {file && previewUrl ? (
+                <div className="flex flex-col gap-3">
+                  <ImageCropper src={previewUrl} onChange={setCrop} />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFile(null);
+                      setCrop(FULL_CROP);
+                    }}
+                    className="pl-label text-mustard-deep hover:underline self-start"
+                  >
+                    ← choose a different image
+                  </button>
+                </div>
+              ) : (
+                <Dropzone onFile={onFile} selected={file} previewUrl={previewUrl} />
+              )}
             </Card>
 
             <Card>
@@ -200,38 +246,20 @@ export default function Intake() {
             <Card>
               <CardHeader>
                 <CardEyebrow>3 · Canvas</CardEyebrow>
-                <CardTitle>Pick a size</CardTitle>
+                <CardTitle>Size follows your crop</CardTitle>
               </CardHeader>
-              <div className="flex flex-wrap gap-2">
-                {CANVAS_PRESETS.map((p) => (
-                  <Pill
-                    key={p.label}
-                    active={canvasW === p.w && canvasH === p.h}
-                    onClick={() => pickPreset(p)}
-                  >
-                    {p.label} cm
-                  </Pill>
-                ))}
+              <div className="flex items-baseline gap-3">
+                <span className="font-display font-black text-display-sm text-text-on-light">
+                  {derivedCm ? `${derivedCm.w} × ${derivedCm.h}` : '— × —'}
+                </span>
+                <span className="pl-label text-text-on-light-muted">cm</span>
               </div>
-              <div className="grid grid-cols-2 gap-3 mt-4">
-                <Input
-                  label="Width"
-                  type="number"
-                  min={5}
-                  value={canvasW}
-                  onChange={(e) => setCanvasW(Number(e.target.value) || 0)}
-                  trailingAddon="cm"
-                />
-                <Input
-                  label="Height"
-                  type="number"
-                  min={5}
-                  value={canvasH}
-                  onChange={(e) => setCanvasH(Number(e.target.value) || 0)}
-                  trailingAddon="cm"
-                />
-              </div>
-              <div className="mt-3">
+              <p className="text-text-on-light-muted text-sm mt-1">
+                {file
+                  ? 'Auto-set from the cropped photo at 300 DPI. Resize the crop frame to change it.'
+                  : 'Drop a photo to see its canvas size.'}
+              </p>
+              <div className="mt-4">
                 <Input
                   label="Coats"
                   type="number"
@@ -299,8 +327,8 @@ export default function Intake() {
 
             {error && <ErrorBox message={error} />}
 
-            <Button type="submit" size="lg" disabled={!file}>
-              Next: review recommendation
+            <Button type="submit" size="lg" disabled={!file} loading={composing}>
+              {composing ? 'Cropping & uploading…' : 'Next: review recommendation'}
             </Button>
           </div>
         </form>
@@ -313,9 +341,9 @@ export default function Intake() {
               <CardEyebrow>Source</CardEyebrow>
               <CardTitle>{title || file?.name}</CardTitle>
             </CardHeader>
-            {previewUrl && (
+            {(reviewPreview ?? previewUrl) && (
               <img
-                src={previewUrl}
+                src={reviewPreview ?? previewUrl ?? ''}
                 alt={title}
                 className="w-full rounded-md border-thick border-ink-900"
               />

@@ -6,9 +6,9 @@ export default function PublicLayout() {
       <header className="px-6 py-5 flex items-center justify-between max-w-container-lg mx-auto w-full">
         <Link to="/" className="flex items-center gap-3">
           <img
-            src="/assets/logo-painto.png"
+            src="/assets/logo%20transparent.png"
             alt="Painto's Lab"
-            className="h-10 w-auto select-none"
+            className="h-16 w-auto select-none"
             draggable={false}
           />
         </Link>
