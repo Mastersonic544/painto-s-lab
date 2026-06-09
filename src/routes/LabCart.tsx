@@ -130,7 +130,7 @@ export default function LabCart() {
       const { taskCount } = await checkoutCart(cartId);
       await refresh();
       if (taskCount === 0) {
-        setError('Cart had no colors to mix — nothing to do.');
+        setError('Cart had no colors to mix. Nothing to do.');
         setCheckoutBusy(false);
         return;
       }
@@ -172,7 +172,7 @@ export default function LabCart() {
           What we're making
         </h1>
         <p className="text-cream-200 mt-1">
-          A production batch. Checkout doesn't sell anything — it produces the consolidated paint
+          A production batch. Checkout doesn't sell anything. It produces the consolidated paint
           plan for the Lab.
         </p>
       </header>
@@ -301,7 +301,7 @@ export default function LabCart() {
               </Button>
               {shortfalls.length > 0 && (
                 <p className="pl-label text-text-on-light-muted mt-3">
-                  Checking out anyway is fine — top up before you mix, or accept the shortfall.
+                  Checking out anyway is fine. Top up before you mix, or accept the shortfall.
                 </p>
               )}
             </Card>

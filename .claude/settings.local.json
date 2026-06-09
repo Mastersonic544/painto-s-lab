@@ -63,7 +63,11 @@
       "Bash(git -c user.email=koukilouay@icloud.com -c 'user.name=Painto'\\\\''s Lab' commit -q -m 'Add paint math and verified-recipe learning *)",
       "Bash(curl -s -o /dev/null -w \"%{http_code} Stock\\\\n\" \"http://localhost:5176/src/routes/Stock.tsx\")",
       "Bash(curl -s -o /dev/null -w \"%{http_code} stock.ts\\\\n\" \"http://localhost:5176/src/lib/stock.ts\")",
-      "Bash(git -c user.email=koukilouay@icloud.com -c 'user.name=Painto'\\\\''s Lab' commit -q -m 'Add stock management with cartridge containers *)"
+      "Bash(git -c user.email=koukilouay@icloud.com -c 'user.name=Painto'\\\\''s Lab' commit -q -m 'Add stock management with cartridge containers *)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code} Landing\\\\n\" \"http://localhost:5176/src/routes/Landing.tsx\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code} useInView\\\\n\" \"http://localhost:5176/src/hooks/useInView.ts\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code} demoSvgs\\\\n\" \"http://localhost:5176/src/lib/demoSvgs.ts\")",
+      "Bash(git -c user.email=koukilouay@icloud.com -c 'user.name=Painto'\\\\''s Lab' commit -q -m 'Add public landing page and final motion polish *)"
     ]
   }
 }

@@ -142,7 +142,7 @@ function RecipePopover({
         </ul>
       ) : (
         <div className="pl-label text-text-on-light-muted">
-          No base paints in stock yet — add some so we can sketch a starting mix.
+          No base paints in stock yet. Add some so we can sketch a starting mix.
         </div>
       )}
 

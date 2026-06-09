@@ -46,9 +46,48 @@
   animation: pl-wave-slide 3.6s linear infinite;
 }
 
+/* ----- Section entrances (used by useInView on landing) ----- */
+
+@keyframes pl-section-splash {
+  from { opacity: 0; transform: scale(0.96) rotate(-1deg); }
+  to   { opacity: 1; transform: scale(1) rotate(0); }
+}
+[data-pl-enter="splash"] {
+  opacity: 0;
+}
+[data-pl-enter="splash"][data-in-view="true"] {
+  animation: pl-section-splash var(--dur-bloom) var(--ease-squish) forwards;
+}
+
+@keyframes pl-section-drip {
+  from { opacity: 0; transform: translateY(-24px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+[data-pl-enter="drip"] {
+  opacity: 0;
+}
+[data-pl-enter="drip"][data-in-view="true"] {
+  animation: pl-section-drip var(--dur-bloom) var(--ease-drip) forwards;
+}
+
+@keyframes pl-section-bloom {
+  from { opacity: 0; transform: translateY(18px) scale(0.98); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+[data-pl-enter="bloom"] {
+  opacity: 0;
+}
+[data-pl-enter="bloom"][data-in-view="true"] {
+  animation: pl-section-bloom var(--dur-bloom) var(--ease-bloom) forwards;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .pl-spinner-rot,
   .pl-wave {
     animation: none;
+  }
+  [data-pl-enter] {
+    opacity: 1 !important;
+    animation: none !important;
   }
 }

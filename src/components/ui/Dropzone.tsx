@@ -93,7 +93,7 @@ export default function Dropzone({
             Drop an image here
           </span>
           <span className="pl-label text-text-on-light-muted">
-            png · jpg · webp — or click to pick one
+            png · jpg · webp · or click to pick one
           </span>
         </div>
       )}

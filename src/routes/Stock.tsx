@@ -456,7 +456,7 @@ function EmptyState({ onAdd }: { onAdd: () => void }) {
         <CardTitle>Stock the shelf</CardTitle>
       </CardHeader>
       <p className="text-text-on-light">
-        Add the colors you mix from — mustard, terracotta, swamp green, the lot. Recipes get sharper
+        Add the colors you mix from: mustard, terracotta, swamp green, the lot. Recipes get sharper
         as you save more verified mixes.
       </p>
       <div className="mt-4">

@@ -252,14 +252,14 @@ export default function Intake() {
               <div className="flex flex-col gap-3">
                 <Radio
                   name="mode"
-                  label="Auto — the lab recommends a tier"
+                  label="Auto: the lab recommends a tier"
                   hint="Vision model + algorithmic check. You confirm before generation."
                   checked={mode === 'auto'}
                   onChange={() => setMode('auto')}
                 />
                 <Radio
                   name="mode"
-                  label="Manual — I'll set it"
+                  label="Manual: I'll set it"
                   hint="Pick a tier or a custom color count."
                   checked={mode === 'manual'}
                   onChange={() => setMode('manual')}
@@ -291,7 +291,7 @@ export default function Intake() {
                       const v = Number(e.target.value);
                       setManualCustom(Number.isFinite(v) && v > 0 ? clampCustomCount(v) : null);
                     }}
-                    hint="Lands between tiers? Round up — never down."
+                    hint="Lands between tiers? Round up, never down."
                   />
                 </div>
               )}
@@ -300,7 +300,7 @@ export default function Intake() {
             {error && <ErrorBox message={error} />}
 
             <Button type="submit" size="lg" disabled={!file}>
-              Next — review recommendation
+              Next: review recommendation
             </Button>
           </div>
         </form>
@@ -360,7 +360,7 @@ export default function Intake() {
                   max={64}
                   value={overrideCount ?? ''}
                   onChange={(e) => setCount(Number(e.target.value))}
-                  hint="A manual number overrides the tier. Round up — never down."
+                  hint="A manual number overrides the tier. Round up, never down."
                 />
               </div>
 
@@ -419,14 +419,14 @@ function RecommendationCard({
         <p className="text-text-on-light mb-4">
           {decision.source === 'model+algorithmic'
             ? 'Vision model and algorithmic check agree on this, with the round-up rule applied.'
-            : 'Algorithmic fallback only — the model was unavailable. Round-up still applies on the next reseed.'}
+            : 'Algorithmic fallback only. The model was unavailable. Round-up still applies on the next reseed.'}
         </p>
       )}
 
       <div className="grid sm:grid-cols-2 gap-3">
         <SubCard title="Vision model" tone="mustard">
           {mode === 'manual' ? (
-            <span className="text-text-on-light">Skipped — Manual mode.</span>
+            <span className="text-text-on-light">Skipped. Manual mode.</span>
           ) : modelLoading ? (
             <div className="flex items-center gap-3">
               <Spinner size="sm" />
@@ -445,7 +445,7 @@ function RecommendationCard({
             <div className="flex flex-col gap-1">
               <div className="font-display font-bold text-text-on-light">Unavailable</div>
               <div className="text-text-on-light-muted text-sm">
-                {decision?.modelError ?? 'No response — using the algorithmic fallback.'}
+                {decision?.modelError ?? 'No response. Using the algorithmic fallback.'}
               </div>
             </div>
           )}

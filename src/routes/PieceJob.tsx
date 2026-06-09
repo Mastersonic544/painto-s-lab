@@ -223,7 +223,7 @@ function ReviewArea(props: {
           setEditCount((n) => n + 1);
           setFeedback(`Merged facet ${mergeFrom} into ${facetId}.`);
         } else {
-          setFeedback('Merge failed — couldn\'t find one of those facets.');
+          setFeedback("Merge failed. Couldn't find one of those facets.");
         }
         setMergeFrom(null);
       }
@@ -507,17 +507,17 @@ function EditHint({
     text =
       selectedFacet == null
         ? 'Click a region to recolor it. The whole color group repaints.'
-        : `Picked region — choose a new color below.`;
+        : `Picked region. Choose a new color below.`;
   if (mode === 'merge')
     text =
       mergeFrom == null
         ? 'Click the region you want to absorb.'
-        : `Absorbing #${mergeFrom} — click the region it should join.`;
+        : `Absorbing #${mergeFrom}. Click the region it should join.`;
   if (mode === 'nudge')
     text =
       selectedLabel == null
         ? 'Click a number to select it, then use arrow keys (shift = jump).'
-        : `Number ${selectedLabel} selected — arrow keys move it.`;
+        : `Number ${selectedLabel} selected. Arrow keys move it.`;
   return <p className="text-text-on-light text-sm mt-3">{text}</p>;
 }
 
