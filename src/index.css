@@ -2,6 +2,7 @@
    Order matters: tokens + fonts before Tailwind so utilities resolve
    against CSS variables that already exist on :root. */
 @import './design-system/styles.css';
+@import './design-system/animations.css';
 
 @tailwind base;
 @tailwind components;

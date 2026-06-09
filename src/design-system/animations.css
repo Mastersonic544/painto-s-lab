@@ -1,0 +1,54 @@
+/* ============================================================
+   Painto's Lab — component animations
+   Keyframes used by Spinner, Dialog, Toast, and LiquidContainer.
+   All honour prefers-reduced-motion via the duration overrides
+   in tokens/motion.css.
+   ============================================================ */
+
+@keyframes pl-spin {
+  to { transform: rotate(360deg); }
+}
+.pl-spinner-rot {
+  animation: pl-spin 1.4s linear infinite;
+  transform-origin: center;
+  transform-box: fill-box;
+}
+
+@keyframes pl-bloom-in {
+  from { opacity: 0; transform: scale(0.85) translateY(8px); }
+  to   { opacity: 1; transform: scale(1)    translateY(0); }
+}
+.pl-dialog-bloom {
+  animation: pl-bloom-in var(--dur-bloom) var(--ease-squish);
+}
+
+@keyframes pl-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.pl-dialog-backdrop {
+  animation: pl-fade-in var(--dur) var(--ease-bloom);
+}
+
+@keyframes pl-toast-in {
+  from { opacity: 0; transform: translateX(24px) scale(0.96); }
+  to   { opacity: 1; transform: translateX(0)    scale(1); }
+}
+.pl-toast-bloom {
+  animation: pl-toast-in var(--dur) var(--ease-squish);
+}
+
+@keyframes pl-wave-slide {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+.pl-wave {
+  animation: pl-wave-slide 3.6s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pl-spinner-rot,
+  .pl-wave {
+    animation: none;
+  }
+}

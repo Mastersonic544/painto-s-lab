@@ -26,7 +26,11 @@
       "Bash(npx tsc *)",
       "Bash(git init *)",
       "Bash(git add *)",
-      "Bash(git -c user.email=koukilouay@icloud.com -c 'user.name=Painto'\\\\''s Lab' commit -q -m 'Scaffold app and wire Painto'\\\\''s Lab design system *)"
+      "Bash(git -c user.email=koukilouay@icloud.com -c 'user.name=Painto'\\\\''s Lab' commit -q -m 'Scaffold app and wire Painto'\\\\''s Lab design system *)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code} /\\\\n\" http://localhost:5173/)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code} /src/routes/Styleguide.tsx\\\\n\" http://localhost:5173/src/routes/Styleguide.tsx)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code} /src/components/ui/LiquidContainer.tsx\\\\n\" \"http://localhost:5173/src/components/ui/LiquidContainer.tsx\")",
+      "Bash(git -c user.email=koukilouay@icloud.com -c 'user.name=Painto'\\\\''s Lab' commit -q -m 'Add Painto'\\\\''s Lab UI primitives and styleguide *)"
     ]
   }
 }

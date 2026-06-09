@@ -4,6 +4,7 @@ import AppLayout from './layouts/AppLayout';
 import Landing from './routes/Landing';
 import Login from './routes/Login';
 import Dashboard from './routes/Dashboard';
+import Styleguide from './routes/Styleguide';
 import RequireAuth from './components/RequireAuth';
 
 export default function App() {
@@ -24,6 +25,9 @@ export default function App() {
       >
         <Route index element={<Dashboard />} />
       </Route>
+
+      {/* Dev-only — Vite tree-shakes this in production builds. */}
+      {import.meta.env.DEV && <Route path="/styleguide" element={<Styleguide />} />}
 
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
