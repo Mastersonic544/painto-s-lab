@@ -58,7 +58,9 @@
       "Bash(curl -s -o /dev/null -w \"%{http_code} Lab\\\\n\" \"http://localhost:5176/src/routes/Lab.tsx\")",
       "Bash(curl -s -o /dev/null -w \"%{http_code} ColorChip\\\\n\" \"http://localhost:5176/src/components/ui/ColorChip.tsx\")",
       "Bash(curl -s -o /dev/null -w \"%{http_code} recipes\\\\n\" \"http://localhost:5176/src/lib/recipes.ts\")",
-      "Bash(git -c user.email=koukilouay@icloud.com -c 'user.name=Painto'\\\\''s Lab' commit -q -m 'Add lab cart and checkout into the Lab *)"
+      "Bash(git -c user.email=koukilouay@icloud.com -c 'user.name=Painto'\\\\''s Lab' commit -q -m 'Add lab cart and checkout into the Lab *)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code} paintMath\\\\n\" \"http://localhost:5176/src/lib/paintMath.ts\")",
+      "Bash(git -c user.email=koukilouay@icloud.com -c 'user.name=Painto'\\\\''s Lab' commit -q -m 'Add paint math and verified-recipe learning *)"
     ]
   }
 }

@@ -16,6 +16,7 @@
 
 import { SupabaseClient } from '@supabase/supabase-js';
 import { generatePaintByNumbers } from '../../engine/generate';
+import { estimateVolumeMl } from '../../src/lib/paintMath';
 import type { Database, PaletteJson } from '../../src/types/db';
 
 const SOURCE_BUCKET = 'source-images';
@@ -122,26 +123,22 @@ export async function runGenerationJob(
     frequency: p.frequency,
   }));
 
-  const canvasArea = piece.canvas_width_cm * piece.canvas_height_cm; // cm²
-  // Single tunable constant. Calibrate from real painting; safety
-  // margin so we always round up (PRD §7).
-  const COVERAGE_FACTOR_ML_PER_CM2_PER_COAT = 0.05;
-  const SAFETY_MARGIN = 1.15;
-
-  const colorRows = result.palette.map((p) => {
-    const raw =
-      p.areaPercentage * canvasArea * piece.coats * COVERAGE_FACTOR_ML_PER_CM2_PER_COAT * SAFETY_MARGIN;
-    // Round UP — never let a piece run out mid-stroke.
-    const ml = Math.ceil(raw * 100) / 100;
-    return {
-      piece_id: piece.id,
-      color_index: p.index,
-      label: null as string | null,
-      rgb_hex: p.hex,
-      area_percentage: p.areaPercentage,
-      estimated_volume_ml: ml,
-    };
-  });
+  // PRD §7: area_cm2 * coats * coverage_factor * safety_margin, rounded
+  // up. The constants live in src/lib/paintMath.ts so server and client
+  // can never drift.
+  const colorRows = result.palette.map((p) => ({
+    piece_id: piece.id,
+    color_index: p.index,
+    label: null as string | null,
+    rgb_hex: p.hex,
+    area_percentage: p.areaPercentage,
+    estimated_volume_ml: estimateVolumeMl({
+      areaPercentage: p.areaPercentage,
+      canvasWidthCm: piece.canvas_width_cm,
+      canvasHeightCm: piece.canvas_height_cm,
+      coats: piece.coats,
+    }),
+  }));
 
   // Replace any stragglers from a previous run, then insert fresh.
   const delCols = await admin.from('piece_colors').delete().eq('piece_id', piece.id);

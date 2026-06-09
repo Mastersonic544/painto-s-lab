@@ -18,10 +18,10 @@ import {
 } from '../lib/cart';
 import {
   BasePaint,
-  ColorRecipe,
+  ResolvedRecipe,
   buildRecipeDisplay,
   fetchBasePaints,
-  fetchRecipesByHex,
+  resolveRecipes,
 } from '../lib/recipes';
 
 export default function LabCart() {
@@ -30,7 +30,7 @@ export default function LabCart() {
   const [items, setItems] = useState<CartItemWithPiece[] | null>(null);
   const [rollup, setRollup] = useState<RollupEntry[]>([]);
   const [bases, setBases] = useState<BasePaint[]>([]);
-  const [recipes, setRecipes] = useState<Map<string, ColorRecipe>>(new Map());
+  const [recipes, setRecipes] = useState<Map<string, ResolvedRecipe>>(new Map());
   const [thumbs, setThumbs] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -51,7 +51,10 @@ export default function LabCart() {
       setItems(is);
       setRollup(ru);
       setBases(bs);
-      const rs = await fetchRecipesByHex(ru.map((r) => r.rgbHex));
+      const rs = await resolveRecipes(
+        ru.map((r) => r.rgbHex),
+        bs,
+      );
       setRecipes(rs);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -205,25 +208,27 @@ export default function LabCart() {
                 Grouped across pieces. Hover any swatch for the recipe.
               </p>
               <div className="grid grid-cols-4 gap-3">
-                {rollup.map((r) => (
-                  <ColorChip
-                    key={r.rgbHex}
-                    hex={r.rgbHex}
-                    totalMl={r.totalMl}
-                    size="md"
-                    recipe={
-                      recipes.get(r.rgbHex)
-                        ? buildRecipeDisplay(
-                            recipes.get(r.rgbHex)!.recipe_json,
-                            r.totalMl,
-                            bases,
-                          )
-                        : null
-                    }
-                    recipeRow={recipes.get(r.rgbHex) ?? null}
-                    bases={bases}
-                  />
-                ))}
+                {rollup.map((r) => {
+                  const resolved = recipes.get(r.rgbHex) ?? null;
+                  const display = resolved
+                    ? buildRecipeDisplay(resolved.steps, r.totalMl, bases, {
+                        kind: resolved.kind,
+                        row: resolved.row,
+                        matchedHex: resolved.matchedHex,
+                      })
+                    : null;
+                  return (
+                    <ColorChip
+                      key={r.rgbHex}
+                      hex={r.rgbHex}
+                      totalMl={r.totalMl}
+                      size="md"
+                      recipe={display}
+                      recipeRow={resolved?.row ?? null}
+                      bases={bases}
+                    />
+                  );
+                })}
               </div>
             </Card>
 

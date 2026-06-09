@@ -12,6 +12,7 @@
 // =============================================================
 
 import { supabase } from './supabase';
+import { estimateVolumeMl } from './paintMath';
 import type { PaletteEntry } from '../types/db';
 
 const RGB_STYLE_RE = /rgb\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)/i;
@@ -226,15 +227,12 @@ export async function saveEditedPiece(args: SaveEditedArgs): Promise<void> {
     label: p.label ?? null,
     rgb_hex: p.color,
     area_percentage: p.areaPercentage,
-    estimated_volume_ml: Math.ceil(
-      p.areaPercentage *
-        args.canvasWidthCm *
-        args.canvasHeightCm *
-        args.coats *
-        0.05 *
-        1.15 *
-        100,
-    ) / 100,
+    estimated_volume_ml: estimateVolumeMl({
+      areaPercentage: p.areaPercentage,
+      canvasWidthCm: args.canvasWidthCm,
+      canvasHeightCm: args.canvasHeightCm,
+      coats: args.coats,
+    }),
   }));
 
   const del = await supabase.from('piece_colors').delete().eq('piece_id', pieceId);

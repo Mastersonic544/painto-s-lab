@@ -1,6 +1,6 @@
 import { useId, useState } from 'react';
 import { cn } from '../../lib/cn';
-import type { BasePaint, RecipeDisplay } from '../../lib/recipes';
+import type { BasePaint, RecipeDisplay, RecipeKind } from '../../lib/recipes';
 import type { ColorRecipe } from '../../lib/recipes';
 
 export interface ColorChipProps {
@@ -97,6 +97,7 @@ function RecipePopover({
   recipe: RecipeDisplay | null;
   recipeRow: ColorRecipe | null;
 }) {
+  const kind = recipe?.kind ?? (recipeRow?.is_verified ? 'verified-exact' : 'estimate');
   return (
     <div
       id={id}
@@ -117,12 +118,14 @@ function RecipePopover({
         {typeof totalMl === 'number' && (
           <span className="font-mono text-xs ml-auto">{formatMl(totalMl)}</span>
         )}
-        {recipeRow?.is_verified && (
-          <span className="pl-label bg-teal text-cream-50 rounded-pill px-2 py-0.5">
-            verified
-          </span>
-        )}
+        <RecipeKindBadge kind={kind} />
       </div>
+
+      {recipe?.kind === 'verified-near' && recipe.matchedHex && (
+        <div className="pl-label text-text-on-light-muted mb-2">
+          matched on {recipe.matchedHex.toUpperCase()}
+        </div>
+      )}
 
       {recipe && recipe.steps.length > 0 ? (
         <ul className="flex flex-col gap-1">
@@ -139,14 +142,46 @@ function RecipePopover({
         </ul>
       ) : (
         <div className="pl-label text-text-on-light-muted">
-          No recipe yet — mix it once and save to lock it in.
+          No base paints in stock yet — add some so we can sketch a starting mix.
         </div>
+      )}
+
+      {kind === 'estimate' && (
+        <p className="mt-2 text-text-on-light-muted text-xs italic">
+          Starting point. Adjust by eye, then save to lock it in.
+        </p>
       )}
 
       {recipeRow?.notes && (
         <div className="mt-2 text-text-on-light-muted text-xs italic">{recipeRow.notes}</div>
       )}
     </div>
+  );
+}
+
+const KIND_TONE: Record<RecipeKind, string> = {
+  'verified-exact': 'bg-teal text-cream-50',
+  'verified-near': 'bg-teal-soft text-ink-900',
+  'unverified-exact': 'bg-mustard-soft text-ink-900',
+  estimate: 'bg-cream-300 text-ink-900',
+};
+const KIND_LABEL: Record<RecipeKind, string> = {
+  'verified-exact': 'verified',
+  'verified-near': 'near match',
+  'unverified-exact': 'saved',
+  estimate: 'estimate',
+};
+
+function RecipeKindBadge({ kind }: { kind: RecipeKind }) {
+  return (
+    <span
+      className={cn(
+        'pl-label rounded-pill px-2 py-0.5 border-thin border-ink-900 whitespace-nowrap',
+        KIND_TONE[kind],
+      )}
+    >
+      {KIND_LABEL[kind]}
+    </span>
   );
 }
 

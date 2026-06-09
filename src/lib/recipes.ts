@@ -7,11 +7,40 @@
 // =============================================================
 
 import { supabase } from './supabase';
+import {
+  NEAR_MATCH_RGB_TOLERANCE,
+  hexToRgb,
+  rgbDistance,
+} from './paintMath';
 import type { RecipeJson, RecipeStep, Tables } from '../types/db';
 
 export type BasePaint = Tables<'base_paints'>;
 export type ColorRecipe = Tables<'color_recipes'>;
 export type MixTask = Tables<'mix_tasks'>;
+
+/**
+ * Where a resolved recipe came from. The UI flags each tier so the
+ * operator can tell an estimate from a recipe they trust.
+ *
+ *   - 'verified-exact':  saved + verified for this exact hex
+ *   - 'verified-near':   verified recipe for a nearby hex (PRD §8 learning)
+ *   - 'unverified-exact':saved for this hex but not yet verified
+ *   - 'estimate':        no row exists — synthesised from base paints
+ */
+export type RecipeKind =
+  | 'verified-exact'
+  | 'verified-near'
+  | 'unverified-exact'
+  | 'estimate';
+
+export interface ResolvedRecipe {
+  steps: RecipeStep[];
+  kind: RecipeKind;
+  /** The DB row backing this resolution, if any. Null for estimates. */
+  row: ColorRecipe | null;
+  /** For 'verified-near', the hex the recipe was actually keyed to. */
+  matchedHex?: string;
+}
 
 export interface ResolvedStep {
   base_paint_id: string;
@@ -57,12 +86,16 @@ export interface RecipeDisplay {
   steps: Array<ResolvedStep & { base?: BasePaint }>;
   /** True iff every step references a known base_paint id. */
   resolvable: boolean;
+  kind: RecipeKind;
+  row: ColorRecipe | null;
+  matchedHex?: string;
 }
 
 export function buildRecipeDisplay(
   steps: RecipeJson,
   targetMl: number,
   bases: BasePaint[],
+  meta?: { kind?: RecipeKind; row?: ColorRecipe | null; matchedHex?: string },
 ): RecipeDisplay {
   const byId = new Map(bases.map((b) => [b.id, b]));
   const resolved = resolveRecipeSteps(steps, targetMl);
@@ -71,7 +104,139 @@ export function buildRecipeDisplay(
     totalMl: targetMl,
     steps: joined,
     resolvable: joined.every((s) => Boolean(s.base)),
+    kind: meta?.kind ?? 'estimate',
+    row: meta?.row ?? null,
+    matchedHex: meta?.matchedHex,
   };
+}
+
+// ----- Estimator & near-match lookup --------------------------
+
+/**
+ * Synthesise a starting recipe by mixing the three nearest base paints
+ * (RGB Euclidean). Inverse-distance weights so the closest base
+ * dominates. Output is always in `parts` form so it scales to any
+ * target volume.
+ *
+ * PRD §8 calls out that pigment mixing is subtractive and nonlinear, so
+ * this is honestly labelled as a starting point — the verified-recipe
+ * loop is what turns it into an accurate recipe over time.
+ */
+export function estimateRecipeFromBases(
+  targetHex: string,
+  bases: BasePaint[],
+): RecipeStep[] | null {
+  if (bases.length === 0) return null;
+  const target = hexToRgb(targetHex);
+  if (!target) return null;
+
+  const scored: Array<{ base: BasePaint; d: number }> = [];
+  for (const b of bases) {
+    const rgb = hexToRgb(b.rgb_hex);
+    if (!rgb) continue;
+    scored.push({ base: b, d: rgbDistance(target, rgb) });
+  }
+  if (scored.length === 0) return null;
+  scored.sort((a, b) => a.d - b.d);
+
+  // If a base lands exactly on the target, return 100% of it. No mixing.
+  if (scored[0].d < 0.5) {
+    return [{ base_paint_id: scored[0].base.id, parts: 1 }];
+  }
+
+  const top = scored.slice(0, Math.min(3, scored.length));
+  const weights = top.map((t) => 1 / Math.max(1, t.d));
+  const totalW = weights.reduce((a, b) => a + b, 0);
+  return top.map((t, i) => ({
+    base_paint_id: t.base.id,
+    parts: weights[i] / totalW,
+  }));
+}
+
+/** Find the closest verified recipe to `targetHex`, within tolerance. */
+export function findNearestVerifiedRecipe(
+  targetHex: string,
+  verifiedPool: ColorRecipe[],
+): ColorRecipe | null {
+  const t = hexToRgb(targetHex);
+  if (!t) return null;
+  let best: { row: ColorRecipe; d: number } | null = null;
+  for (const r of verifiedPool) {
+    const rgb = hexToRgb(r.target_rgb_hex);
+    if (!rgb) continue;
+    const d = rgbDistance(t, rgb);
+    if (!best || d < best.d) best = { row: r, d };
+  }
+  return best && best.d <= NEAR_MATCH_RGB_TOLERANCE ? best.row : null;
+}
+
+/**
+ * Resolve a recipe for one target hex using all available signals.
+ * Order:
+ *   1. exact row, is_verified=true            -> verified-exact
+ *   2. nearest verified row within tolerance  -> verified-near
+ *   3. exact row, is_verified=false           -> unverified-exact
+ *   4. synthesised from base paints           -> estimate
+ *   5. nothing usable (no bases, no rows)     -> null
+ */
+export function resolveOneRecipe(
+  targetHex: string,
+  exactRow: ColorRecipe | null,
+  verifiedPool: ColorRecipe[],
+  bases: BasePaint[],
+): ResolvedRecipe | null {
+  if (exactRow && exactRow.is_verified) {
+    return { steps: exactRow.recipe_json, kind: 'verified-exact', row: exactRow };
+  }
+  const near = findNearestVerifiedRecipe(targetHex, verifiedPool);
+  if (near && (!exactRow || near.id !== exactRow.id)) {
+    return {
+      steps: near.recipe_json,
+      kind: 'verified-near',
+      row: near,
+      matchedHex: near.target_rgb_hex,
+    };
+  }
+  if (exactRow) {
+    return { steps: exactRow.recipe_json, kind: 'unverified-exact', row: exactRow };
+  }
+  const estimate = estimateRecipeFromBases(targetHex, bases);
+  if (estimate) {
+    return { steps: estimate, kind: 'estimate', row: null };
+  }
+  return null;
+}
+
+/**
+ * Batch resolve recipes for a list of hexes. One round-trip for exact
+ * matches, one for the verified pool. Cheap to call from any screen.
+ */
+export async function resolveRecipes(
+  hexes: string[],
+  bases: BasePaint[],
+): Promise<Map<string, ResolvedRecipe>> {
+  const out = new Map<string, ResolvedRecipe>();
+  if (hexes.length === 0) return out;
+  const uniq = [...new Set(hexes)];
+
+  const [exactMap, verifiedPool] = await Promise.all([
+    fetchRecipesByHex(uniq),
+    fetchAllVerifiedRecipes(),
+  ]);
+  for (const hex of uniq) {
+    const resolved = resolveOneRecipe(hex, exactMap.get(hex) ?? null, verifiedPool, bases);
+    if (resolved) out.set(hex, resolved);
+  }
+  return out;
+}
+
+export async function fetchAllVerifiedRecipes(): Promise<ColorRecipe[]> {
+  const { data, error } = await supabase
+    .from('color_recipes')
+    .select('*')
+    .eq('is_verified', true);
+  if (error) throw error;
+  return data ?? [];
 }
 
 /**
