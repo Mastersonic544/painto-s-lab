@@ -134,7 +134,8 @@ export default function LabCart() {
         setCheckoutBusy(false);
         return;
       }
-      navigate(`/app/lab/${cartId}`);
+      // Stock was deducted; the batch is now logged. Land on History.
+      navigate('/app/history');
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
       setCheckoutBusy(false);

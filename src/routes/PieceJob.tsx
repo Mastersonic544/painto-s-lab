@@ -11,6 +11,7 @@ import Pill from '../components/ui/Pill';
 import ProgressBar from '../components/ui/ProgressBar';
 import Spinner from '../components/ui/Spinner';
 import { usePieceStatus } from '../hooks/usePieceStatus';
+import { estimateVolumeMl } from '../lib/paintMath';
 import { signedUrl } from '../lib/pieces';
 import { supabase } from '../lib/supabase';
 import {
@@ -396,6 +397,58 @@ function ReviewArea(props: {
     outline.childNodes.forEach((n) => composite.appendChild(n.cloneNode(true)));
     save(`${slug}-colors-numbers.svg`, new XMLSerializer().serializeToString(composite));
   }
+  // 4. Color code sheet — the number→color key as a printable PDF. Opens a
+  // styled page and the print dialog so the operator "Save as PDF".
+  function downloadColorSheet() {
+    if (palette.length === 0) return setFeedback('No palette to print yet.');
+    const rows = palette
+      .slice()
+      .sort((a, b) => a.index - b.index)
+      .map((p) => {
+        const ml = estimateVolumeMl({
+          areaPercentage: p.areaPercentage,
+          canvasWidthCm: props.canvasW,
+          canvasHeightCm: props.canvasH,
+          coats: props.coats,
+        });
+        return `<tr>
+          <td class="num">${p.index}</td>
+          <td><span class="sw" style="background:${esc(p.color)}"></span></td>
+          <td class="mono">${esc(p.color).toUpperCase()}</td>
+          <td class="mono r">${(p.areaPercentage * 100).toFixed(1)}%</td>
+          <td class="mono r">${Math.ceil(ml)} ml</td>
+        </tr>`;
+      })
+      .join('');
+    const html = `<!doctype html><html><head><meta charset="utf-8" />
+<title>${esc(props.title)} — color code sheet</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: Georgia, 'Times New Roman', serif; color: #14140f; margin: 32px; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .meta { font-family: ui-monospace, monospace; font-size: 12px; color: #5c5a4e; margin-bottom: 20px; }
+  table { border-collapse: collapse; width: 100%; }
+  th, td { border: 2px solid #14140f; padding: 8px 10px; text-align: left; font-size: 13px; }
+  th { background: #eae6db; font-family: ui-monospace, monospace; text-transform: uppercase; letter-spacing: 1px; font-size: 11px; }
+  .num { font-weight: 700; width: 48px; text-align: center; font-size: 16px; }
+  .sw { display: inline-block; width: 34px; height: 22px; border: 2px solid #14140f; border-radius: 3px; vertical-align: middle; }
+  .mono { font-family: ui-monospace, monospace; }
+  .r { text-align: right; }
+  @media print { body { margin: 12mm; } }
+</style></head><body>
+  <h1>${esc(props.title)} — color code sheet</h1>
+  <div class="meta">${props.canvasW}×${props.canvasH} cm · ${props.coats} coats · ${palette.length} colors · ml estimated at this size</div>
+  <table>
+    <thead><tr><th>#</th><th>Color</th><th>Hex</th><th>Area</th><th>Paint</th></tr></thead>
+    <tbody>${rows}</tbody>
+  </table>
+  <script>window.onload = function(){ setTimeout(function(){ window.print(); }, 150); };</script>
+</body></html>`;
+    const w = window.open('', '_blank');
+    if (!w) return setFeedback('Allow pop-ups to export the color sheet.');
+    w.document.write(html);
+    w.document.close();
+  }
 
   return (
     <div className="grid lg:grid-cols-[1fr_280px] gap-6">
@@ -507,9 +560,17 @@ function ReviewArea(props: {
             <Button variant="secondary" onClick={downloadColorsOnly} disabled={!ready}>
               Colors only (final)
             </Button>
+            <Button
+              variant="tertiary"
+              onClick={downloadColorSheet}
+              disabled={palette.length === 0}
+            >
+              Color code sheet (PDF)
+            </Button>
           </div>
           <p className="pl-label text-text-on-light-muted mt-3">
-            SVG · vector, scales to any print size. Reflects your edits.
+            SVGs are vector and reflect your edits. The code sheet opens a print
+            dialog — choose "Save as PDF".
           </p>
         </Card>
 
@@ -672,6 +733,13 @@ function ErrorCard({ title, body }: { title: string; body: string }) {
 
 // Read the digit a label `<text>` shows for a given facetId. We use this
 // to map a facet back to its palette index after a recolor.
+// Escape text interpolated into the color-sheet print HTML.
+function esc(s: string): string {
+  return s.replace(/[&<>"']/g, (c) =>
+    c === '&' ? '&amp;' : c === '<' ? '&lt;' : c === '>' ? '&gt;' : c === '"' ? '&quot;' : '&#39;',
+  );
+}
+
 function readFacetLabelNumber(outlineRoot: HTMLDivElement | null, facetId: number): number | null {
   if (!outlineRoot) return null;
   const g = outlineRoot.querySelector(`g.label[data-facetId="${facetId}"]`);

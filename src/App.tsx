@@ -4,6 +4,7 @@ import AppLayout from './layouts/AppLayout';
 import Landing from './routes/Landing';
 import Login from './routes/Login';
 import Dashboard from './routes/Dashboard';
+import History from './routes/History';
 import Hub from './routes/Hub';
 import Intake from './routes/Intake';
 import Lab from './routes/Lab';
@@ -34,6 +35,7 @@ export default function App() {
         <Route path="hub" element={<Hub />} />
         <Route path="cart" element={<LabCart />} />
         <Route path="lab/:cartId" element={<Lab />} />
+        <Route path="history" element={<History />} />
         <Route path="stock" element={<Stock />} />
         <Route path="piece/:id" element={<PieceJob />} />
       </Route>

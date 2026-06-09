@@ -273,6 +273,41 @@ export function findShortfalls(
   return out.sort((a, b) => b.shortMl - a.shortMl);
 }
 
+/**
+ * Decrement base-paint stock for a batch of target colors, resolving each
+ * target's recipe (verified → near → estimate, accounting for mixed colors)
+ * into per-base ml and subtracting it from current_level_ml. Clamped at 0 so
+ * a shortfall just empties the container rather than going negative — the Lab
+ * Cart already warns about shortfalls before checkout.
+ *
+ * Called once at checkout. Not transactional; a rare partial failure is
+ * non-corrupting (operator can correct stock by hand).
+ */
+export async function consumeBaseStock(
+  targets: Array<{ rgbHex: string; volumeMl: number }>,
+): Promise<Map<string, number>> {
+  if (targets.length === 0) return new Map();
+  const bases = await fetchBasePaints();
+  if (bases.length === 0) return new Map();
+  const recipes = await resolveRecipes(
+    targets.map((t) => t.rgbHex),
+    bases,
+  );
+  const usage = computeBaseUsage(targets, recipes, bases);
+  const byId = new Map(bases.map((b) => [b.id, b]));
+  for (const [baseId, ml] of usage) {
+    const base = byId.get(baseId);
+    if (!base) continue;
+    const next = Math.max(0, base.current_level_ml - ml);
+    const { error } = await supabase
+      .from('base_paints')
+      .update({ current_level_ml: Math.round(next * 100) / 100 })
+      .eq('id', baseId);
+    if (error) throw error;
+  }
+  return usage;
+}
+
 export async function fetchAllVerifiedRecipes(): Promise<ColorRecipe[]> {
   const { data, error } = await supabase
     .from('color_recipes')
@@ -295,49 +330,15 @@ export async function fetchAllVerifiedRecipes(): Promise<ColorRecipe[]> {
 export async function completeMixTask(taskId: string): Promise<void> {
   const { data: task, error: tErr } = await supabase
     .from('mix_tasks')
-    .select('*')
+    .select('status')
     .eq('id', taskId)
     .maybeSingle();
   if (tErr) throw tErr;
   if (!task) throw new Error('Mix task not found');
   if (task.status === 'done') return; // idempotent
 
-  if (task.recipe_id) {
-    const { data: recipe, error: rErr } = await supabase
-      .from('color_recipes')
-      .select('*')
-      .eq('id', task.recipe_id)
-      .maybeSingle();
-    if (rErr) throw rErr;
-    if (recipe) {
-      const steps = resolveRecipeSteps(recipe.recipe_json, task.target_volume_ml);
-      const ids = [...new Set(steps.map((s) => s.base_paint_id))];
-      if (ids.length) {
-        const { data: bases, error: bErr } = await supabase
-          .from('base_paints')
-          .select('id, current_level_ml')
-          .in('id', ids);
-        if (bErr) throw bErr;
-        const levelById = new Map((bases ?? []).map((b) => [b.id, b.current_level_ml]));
-        // Aggregate ml-per-base before writing so steps that repeat a base
-        // (rare but allowed) are summed once.
-        const usageById = new Map<string, number>();
-        for (const s of steps) {
-          usageById.set(s.base_paint_id, (usageById.get(s.base_paint_id) ?? 0) + s.ml);
-        }
-        for (const [baseId, ml] of usageById) {
-          const cur = levelById.get(baseId) ?? 0;
-          const next = Math.max(0, cur - ml);
-          const { error } = await supabase
-            .from('base_paints')
-            .update({ current_level_ml: Math.round(next * 100) / 100 })
-            .eq('id', baseId);
-          if (error) throw error;
-        }
-      }
-    }
-  }
-
+  // Stock is decremented for the whole batch at checkout (see consumeBaseStock
+  // in checkoutCart), so completing a task here only records progress.
   const { error } = await supabase
     .from('mix_tasks')
     .update({ status: 'done', completed_at: new Date().toISOString() })
@@ -345,8 +346,8 @@ export async function completeMixTask(taskId: string): Promise<void> {
   if (error) throw error;
 }
 
-/** Reopen a completed mix task. Does NOT refund stock — operator has
- *  already poured the paint. */
+/** Reopen a completed mix task. Stock was consumed at checkout, so this only
+ *  flips the task back to todo. */
 export async function reopenMixTask(taskId: string): Promise<void> {
   const { error } = await supabase
     .from('mix_tasks')

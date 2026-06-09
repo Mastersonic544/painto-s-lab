@@ -9,6 +9,7 @@ const navItems = [
   { to: '/app/hub', label: 'The Hub' },
   { to: '/app/cart', label: 'Lab Cart', showCartCount: true },
   { to: '/app/stock', label: 'Stock' },
+  { to: '/app/history', label: 'History' },
 ];
 
 export default function AppLayout() {

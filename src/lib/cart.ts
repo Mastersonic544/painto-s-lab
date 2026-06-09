@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { consumeBaseStock } from './recipes';
 import type { Tables } from '../types/db';
 
 export type Cart = Tables<'carts'>;
@@ -178,6 +179,15 @@ export async function getCartRollup(cartId: string): Promise<RollupEntry[]> {
  * recipe_id null and the operator gets to author it in mixing mode.
  */
 export async function checkoutCart(cartId: string): Promise<{ taskCount: number }> {
+  // Only the first checkout consumes stock; a re-checkout must not deduct again.
+  const { data: cartRow, error: cartErr } = await supabase
+    .from('carts')
+    .select('status')
+    .eq('id', cartId)
+    .maybeSingle();
+  if (cartErr) throw cartErr;
+  const firstCheckout = cartRow?.status !== 'checked_out';
+
   const rollup = await getCartRollup(cartId);
   const hexes = rollup.map((r) => r.rgbHex);
 
@@ -207,6 +217,12 @@ export async function checkoutCart(cartId: string): Promise<{ taskCount: number 
     if (ins.error) throw ins.error;
   }
 
+  // Drop the batch's paint from stock now (resolves recipes, accounts for
+  // mixed colors). Shortfalls were already surfaced in the cart pre-checkout.
+  if (firstCheckout && rollup.length) {
+    await consumeBaseStock(rollup.map((r) => ({ rgbHex: r.rgbHex, volumeMl: r.totalMl })));
+  }
+
   const upd = await supabase
     .from('carts')
     .update({ status: 'checked_out', checked_out_at: new Date().toISOString() })
@@ -214,6 +230,39 @@ export async function checkoutCart(cartId: string): Promise<{ taskCount: number 
   if (upd.error) throw upd.error;
 
   return { taskCount: rollup.length };
+}
+
+export interface BatchHistoryEntry {
+  cart: Cart;
+  items: CartItemWithPiece[];
+  colorCount: number;
+  totalMl: number;
+}
+
+/**
+ * Past batches: every checked-out cart, newest first, with its pieces and a
+ * rolled-up color count + total ml. Derived from existing data — no separate
+ * history table, since a checked-out cart is already an immutable record.
+ */
+export async function listCheckoutHistory(): Promise<BatchHistoryEntry[]> {
+  const { data: carts, error } = await supabase
+    .from('carts')
+    .select('*')
+    .eq('status', 'checked_out')
+    .order('checked_out_at', { ascending: false });
+  if (error) throw error;
+
+  const out: BatchHistoryEntry[] = [];
+  for (const cart of carts ?? []) {
+    const [items, rollup] = await Promise.all([listCartItems(cart.id), getCartRollup(cart.id)]);
+    out.push({
+      cart,
+      items,
+      colorCount: rollup.length,
+      totalMl: Math.ceil(rollup.reduce((a, r) => a + r.totalMl, 0)),
+    });
+  }
+  return out;
 }
 
 /** Sum of quantities in the open cart, 0 if none. */

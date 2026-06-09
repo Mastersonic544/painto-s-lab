@@ -2,10 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import Button from '../components/ui/Button';
 import Card, { CardEyebrow, CardHeader, CardTitle } from '../components/ui/Card';
-import ColorChip from '../components/ui/ColorChip';
-import { Tab, TabList, TabPanel, Tabs } from '../components/ui/Tabs';
 import Spinner from '../components/ui/Spinner';
-import LiquidContainer from '../components/ui/LiquidContainer';
 import {
   BasePaint,
   MixTask,
@@ -122,17 +119,17 @@ export default function Lab() {
     <div className="max-w-container-lg flex flex-col gap-6">
       <header className="flex items-end justify-between flex-wrap gap-3">
         <div>
-          <span className="pl-label text-mustard-soft">The Lab</span>
+          <span className="pl-label text-mustard-soft">Mix recipes</span>
           <h1 className="font-display font-bold text-display-sm text-cream-50 mt-1">
             {cart.name}
           </h1>
           <p className="text-cream-200 mt-1">
             {summary?.total ?? 0} colors · {summary?.done ?? 0} mixed ·{' '}
-            {Math.ceil(summary?.ml ?? 0)} ml total
+            {Math.ceil(summary?.ml ?? 0)} ml total · stock was deducted at checkout
           </p>
         </div>
-        <Link to="/app/cart" className="pl-label text-mustard-soft hover:underline">
-          ← cart
+        <Link to="/app/history" className="pl-label text-mustard-soft hover:underline">
+          ← history
         </Link>
       </header>
 
@@ -142,92 +139,21 @@ export default function Lab() {
         </div>
       )}
 
-      <Tabs defaultValue="sheet">
-        <TabList>
-          <Tab value="sheet">Color sheet</Tab>
-          <Tab value="mixing">Mixing mode</Tab>
-          <Tab value="stock">Stock impact</Tab>
-        </TabList>
+      <p className="text-cream-200 max-w-lg">
+        Adjust any color's mix by eye and save it. Saved recipes are reused automatically the next
+        time that color comes up, so your mixes get sharper over time.
+      </p>
 
-        <TabPanel value="sheet">
-          <ColorSheet tasks={tasks} recipes={recipes} bases={bases} />
-        </TabPanel>
-
-        <TabPanel value="mixing">
-          <MixingList
-            tasks={tasks}
-            recipes={recipes}
-            bases={bases}
-            busyId={busyId}
-            onComplete={complete}
-            onReopen={reopen}
-            onReload={reload}
-          />
-        </TabPanel>
-
-        <TabPanel value="stock">
-          <StockImpact tasks={tasks} recipes={recipes} bases={bases} />
-        </TabPanel>
-      </Tabs>
+      <MixingList
+        tasks={tasks}
+        recipes={recipes}
+        bases={bases}
+        busyId={busyId}
+        onComplete={complete}
+        onReopen={reopen}
+        onReload={reload}
+      />
     </div>
-  );
-}
-
-// ----- Color sheet view ---------------------------------------
-
-function ColorSheet({
-  tasks,
-  recipes,
-  bases,
-}: {
-  tasks: MixTask[];
-  recipes: Map<string, ResolvedRecipe>;
-  bases: BasePaint[];
-}) {
-  if (tasks.length === 0) {
-    return (
-      <Card>
-        <CardEyebrow>Empty batch</CardEyebrow>
-        <p className="text-text-on-light mt-2">No mix tasks for this cart.</p>
-      </Card>
-    );
-  }
-  return (
-    <Card>
-      <CardHeader>
-        <CardEyebrow>Full batch palette</CardEyebrow>
-        <CardTitle>Every color across every piece</CardTitle>
-      </CardHeader>
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-6">
-        {tasks.map((t) => {
-          const resolved = recipes.get(t.target_rgb_hex) ?? null;
-          const display = resolved
-            ? buildRecipeDisplay(resolved.steps, t.target_volume_ml, bases, {
-                kind: resolved.kind,
-                row: resolved.row,
-                matchedHex: resolved.matchedHex,
-              })
-            : null;
-          return (
-            <div key={t.id} className="flex flex-col items-center gap-1">
-              <ColorChip
-                hex={t.target_rgb_hex}
-                totalMl={t.target_volume_ml}
-                size="lg"
-                recipe={display}
-                recipeRow={resolved?.row ?? null}
-                bases={bases}
-              />
-              {t.status === 'done' && (
-                <span className="pl-label bg-teal text-cream-50 rounded-pill px-2 py-0.5">
-                  mixed
-                </span>
-              )}
-            </div>
-          );
-        })}
-      </div>
-    </Card>
   );
 }
 
@@ -543,83 +469,6 @@ function RecipeEditor({
         </span>
       </div>
     </div>
-  );
-}
-
-// ----- Stock impact -------------------------------------------
-
-function StockImpact({
-  tasks,
-  recipes,
-  bases,
-}: {
-  tasks: MixTask[];
-  recipes: Map<string, ResolvedRecipe>;
-  bases: BasePaint[];
-}) {
-  // Sum required ml across all *todo* tasks per base paint, then compare
-  // against current_level_ml to flag shortfalls. Done tasks already
-  // decremented their share.
-  const required = useMemo(() => {
-    const total = new Map<string, number>();
-    for (const t of tasks) {
-      if (t.status === 'done') continue;
-      const resolved = recipes.get(t.target_rgb_hex);
-      if (!resolved) continue;
-      const display = buildRecipeDisplay(resolved.steps, t.target_volume_ml, bases);
-      for (const s of display.steps) {
-        total.set(s.base_paint_id, (total.get(s.base_paint_id) ?? 0) + s.ml);
-      }
-    }
-    return total;
-  }, [tasks, recipes, bases]);
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardEyebrow>Stock impact</CardEyebrow>
-        <CardTitle>What this batch will consume</CardTitle>
-      </CardHeader>
-      {bases.length === 0 ? (
-        <p className="text-text-on-light">
-          No base paints in stock yet. Add some in the Stock screen to plan mixes.
-        </p>
-      ) : (
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {bases.map((b) => {
-            const need = required.get(b.id) ?? 0;
-            const pct = Math.max(
-              0,
-              Math.min(100, (b.current_level_ml / Math.max(1, b.container_capacity_ml)) * 100),
-            );
-            const short = need > b.current_level_ml;
-            return (
-              <div key={b.id} className="flex items-center gap-3">
-                <LiquidContainer
-                  label={b.name}
-                  color={b.rgb_hex}
-                  fillPct={pct}
-                  capacityMl={b.container_capacity_ml}
-                  currentMl={b.current_level_ml}
-                  width={96}
-                />
-                <div className="flex-1 min-w-0">
-                  <div className="font-display font-bold text-cream-50 truncate">{b.name}</div>
-                  <div className="pl-label text-text-on-dark-muted mt-1">
-                    needs {need.toFixed(1)} ml
-                  </div>
-                  {short && (
-                    <div className="mt-2 pl-label bg-terracotta text-cream-50 rounded-pill px-2 py-0.5 inline-block">
-                      short by {(need - b.current_level_ml).toFixed(1)} ml
-                    </div>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </Card>
   );
 }
 

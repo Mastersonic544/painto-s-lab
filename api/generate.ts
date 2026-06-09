@@ -10,15 +10,31 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
 import { getAdmin } from './_lib/admin';
-import { runGenerationJob, markPieceError } from './_lib/run-job';
 import type { Database } from '../src/types/db';
 
 export const config = {
-  // 60s is Vercel Pro's ceiling. Hobby caps at 10s, which is not
-  // enough for the engine on anything but tiny images — keep the
-  // dedicated worker path in engine/run-job.ts as the escape hatch.
-  maxDuration: 60,
+  // This function only authenticates and forwards to the Render converter,
+  // so it's fast — 10s is plenty and keeps it within the Hobby cap. The heavy
+  // engine work runs on the long-running backend (engine/server.ts).
+  maxDuration: 10,
 };
+
+// Lightweight failure write — kept here (not imported from run-job) so this
+// function never pulls the engine/native canvas into its bundle/cold start.
+async function markPieceError(
+  admin: ReturnType<typeof getAdmin>,
+  pieceId: string,
+  message: string,
+): Promise<void> {
+  try {
+    await admin
+      .from('pieces')
+      .update({ status: 'error', error_message: message.slice(0, 1000) })
+      .eq('id', pieceId);
+  } catch {
+    // best-effort
+  }
+}
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
@@ -80,7 +96,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   // Local / no external converter: run inline (works via the Vite dev bridge).
+  // Imported dynamically so the engine + native canvas only load on this path
+  // — never when forwarding (production), which keeps the Vercel bundle lean.
   try {
+    const { runGenerationJob } = await import('./_lib/run-job');
     const result = await runGenerationJob(admin, pieceId);
     return res.status(200).json({ ok: true, ...result });
   } catch (err) {
