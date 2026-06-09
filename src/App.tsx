@@ -6,6 +6,8 @@ import Login from './routes/Login';
 import Dashboard from './routes/Dashboard';
 import Hub from './routes/Hub';
 import Intake from './routes/Intake';
+import Lab from './routes/Lab';
+import LabCart from './routes/LabCart';
 import PieceJob from './routes/PieceJob';
 import Styleguide from './routes/Styleguide';
 import RequireAuth from './components/RequireAuth';
@@ -29,6 +31,8 @@ export default function App() {
         <Route index element={<Dashboard />} />
         <Route path="intake" element={<Intake />} />
         <Route path="hub" element={<Hub />} />
+        <Route path="cart" element={<LabCart />} />
+        <Route path="lab/:cartId" element={<Lab />} />
         <Route path="piece/:id" element={<PieceJob />} />
       </Route>
 

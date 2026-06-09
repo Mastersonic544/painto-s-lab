@@ -53,7 +53,12 @@
       "Bash(curl -s -o /dev/null -w \"%{http_code} Hub\\\\n\" \"http://localhost:5176/src/routes/Hub.tsx\")",
       "Bash(curl -s -o /dev/null -w \"%{http_code} cart\\\\n\" \"http://localhost:5176/src/lib/cart.ts\")",
       "Bash(curl -s -o /dev/null -w \"%{http_code} useCart\\\\n\" \"http://localhost:5176/src/hooks/useCart.tsx\")",
-      "Bash(git -c user.email=koukilouay@icloud.com -c 'user.name=Painto'\\\\''s Lab' commit -q -m 'Add the Hub gallery *)"
+      "Bash(git -c user.email=koukilouay@icloud.com -c 'user.name=Painto'\\\\''s Lab' commit -q -m 'Add the Hub gallery *)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code} LabCart\\\\n\" \"http://localhost:5176/src/routes/LabCart.tsx\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code} Lab\\\\n\" \"http://localhost:5176/src/routes/Lab.tsx\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code} ColorChip\\\\n\" \"http://localhost:5176/src/components/ui/ColorChip.tsx\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code} recipes\\\\n\" \"http://localhost:5176/src/lib/recipes.ts\")",
+      "Bash(git -c user.email=koukilouay@icloud.com -c 'user.name=Painto'\\\\''s Lab' commit -q -m 'Add lab cart and checkout into the Lab *)"
     ]
   }
 }
