@@ -1,0 +1,32 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm --version)",
+      "Bash(curl -sL \"https://api.anthropic.com/v1/design/h/YCkhDVkeUNj8_TpKLIakbg\" -o /tmp/design.gz)",
+      "Bash(mkdir -p /tmp/ds)",
+      "Bash(tar xzf *)",
+      "Read(//tmp/**)",
+      "Bash(curl -sLI \"https://api.anthropic.com/v1/design/h/YCkhDVkeUNj8_TpKLIakbg\")",
+      "Bash(curl -sL -w \"\\\\n---HTTP_CODE: %{http_code}---\\\\n\" \"https://api.anthropic.com/v1/design/h/YCkhDVkeUNj8_TpKLIakbg\" -o /tmp/design.gz)",
+      "Bash(curl -v \"https://api.anthropic.com/v1/design/h/YCkhDVkeUNj8_TpKLIakbg\" -o /tmp/design.gz)",
+      "Bash(curl -sL \"https://api.anthropic.com/v1/design/h/p-XJnPOmt_pn5sL1bRXONQ\" -o /tmp/design.gz)",
+      "Bash(cp -r /tmp/ds/painto-s-lab-design-system design-reference/)",
+      "Bash(cp /tmp/ds/painto-s-lab-design-system/project/tokens/*.css src/design-system/tokens/)",
+      "Bash(cp /tmp/ds/painto-s-lab-design-system/project/assets/* public/assets/)",
+      "Bash(npm install *)",
+      "Bash(npm run *)",
+      "Bash(curl -s http://localhost:5173/)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:5173/src/main.tsx)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:5173/src/index.css)",
+      "Bash(curl -s http://localhost:5173/src/index.css)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:5173/src/design-system/tokens/colors.css)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" \"http://localhost:5173/assets/logo-painto.png\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code} %{size_download}b\\\\n\" \"http://localhost:5173/assets/logo-painto.png\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code} %{size_download}b\\\\n\" \"http://localhost:5173/assets/icon-pl.png\")",
+      "Bash(npx tsc *)",
+      "Bash(git init *)",
+      "Bash(git add *)",
+      "Bash(git -c user.email=koukilouay@icloud.com -c 'user.name=Painto'\\\\''s Lab' commit -q -m 'Scaffold app and wire Painto'\\\\''s Lab design system *)"
+    ]
+  }
+}

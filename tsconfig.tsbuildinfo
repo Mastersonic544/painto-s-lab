@@ -1,0 +1,1 @@
+{"root":["./src/app.tsx","./src/main.tsx","./src/components/requireauth.tsx","./src/layouts/applayout.tsx","./src/layouts/publiclayout.tsx","./src/lib/supabase.ts","./src/routes/dashboard.tsx","./src/routes/landing.tsx","./src/routes/login.tsx","./vite.config.ts"],"version":"5.9.3"}

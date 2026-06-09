@@ -1,0 +1,13 @@
+/* ============================================================
+   Painto's Lab — Webfonts
+   ------------------------------------------------------------
+   SUBSTITUTION NOTE: The "PAINTO'S LAB" wordmark uses a custom
+   hand-bubbled display face. The nearest readily-available match
+   is "Baloo 2" (chunky, rounded, balloon terminals). Body uses
+   "Nunito" (friendly humanist sans) and lab/number data uses
+   "Space Mono" (typewriter laboratory feel).
+   If you have the original wordmark font file, drop it in and
+   swap the @font-face below.
+   ============================================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=Baloo+2:wght@400;500;600;700;800&family=Nunito:ital,wght@0,400;0,500;0,600;0,700;0,800;0,900;1,400;1,700&family=Space+Mono:wght@400;700&display=swap');

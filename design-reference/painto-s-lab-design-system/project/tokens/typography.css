@@ -1,0 +1,56 @@
+/* ============================================================
+   Painto's Lab — Typography Tokens
+   Bubbly rounded display (Baloo 2) for headings, friendly sans
+   (Nunito) for body, typewriter mono (Space Mono) for lab data
+   and paint-by-numbers digits.
+   ============================================================ */
+:root {
+  /* Families */
+  --font-display: 'Baloo 2', system-ui, -apple-system, sans-serif;
+  --font-body:    'Nunito', system-ui, -apple-system, sans-serif;
+  --font-mono:    'Space Mono', ui-monospace, 'Cascadia Code', monospace;
+
+  /* Weights */
+  --fw-regular:  400;
+  --fw-medium:   500;
+  --fw-semibold: 600;
+  --fw-bold:     700;
+  --fw-black:    800;
+
+  /* Fluid-ish display scale (px) */
+  --fs-display-xl: 88px;   /* hero wordmark scale */
+  --fs-display-lg: 64px;
+  --fs-display-md: 48px;
+  --fs-display-sm: 36px;
+
+  /* Heading + body scale */
+  --fs-h1: 32px;
+  --fs-h2: 26px;
+  --fs-h3: 21px;
+  --fs-lg: 19px;
+  --fs-base: 17px;
+  --fs-sm: 15px;
+  --fs-xs: 13px;
+  --fs-2xs: 11px;
+
+  /* Line heights */
+  --lh-tight:  1.04;   /* big display */
+  --lh-snug:   1.18;   /* headings */
+  --lh-normal: 1.5;    /* body */
+  --lh-relaxed:1.65;
+
+  /* Letter spacing */
+  --ls-display: -0.01em;
+  --ls-tight:   -0.005em;
+  --ls-normal:  0;
+  --ls-label:   0.04em;   /* mono labels / eyebrows */
+  --ls-wide:    0.12em;
+
+  /* Semantic roles */
+  --text-hero:      var(--fw-black) var(--fs-display-xl)/var(--lh-tight) var(--font-display);
+  --text-title:     var(--fw-bold)  var(--fs-display-sm)/var(--lh-snug)  var(--font-display);
+  --text-heading:   var(--fw-bold)  var(--fs-h2)/var(--lh-snug)         var(--font-display);
+  --text-body:      var(--fw-regular) var(--fs-base)/var(--lh-normal)   var(--font-body);
+  --text-body-bold: var(--fw-bold)  var(--fs-base)/var(--lh-normal)     var(--font-body);
+  --text-label:     var(--fw-bold)  var(--fs-2xs)/1 var(--font-mono);   /* uppercase + ls-label */
+}

@@ -1,0 +1,87 @@
+/* ============================================================
+   Painto's Lab — Color Tokens
+   A deep swamp-Amazon green world, lit by cream lab labels and
+   splashed with real paint pops. Greens are muted and earthy,
+   never neon or electric.
+   ============================================================ */
+:root {
+  /* --- Swamp greens (the dominant world, darkest to lightest) --- */
+  --swamp-950: #061C1A;
+  --swamp-900: #082826;
+  --swamp-800: #0A332F;
+  --swamp-700: #0D3D3A;   /* CORE brand background */
+  --swamp-600: #134B46;
+  --swamp-500: #1B5C56;
+  --swamp-400: #2A736B;   /* muted moss line / hairline on dark */
+  --swamp-300: #4A8E85;
+
+  /* --- Cream (lab paper, lettering, surfaces) --- */
+  --cream-50:  #FBF9F3;
+  --cream-100: #F4F1E7;
+  --cream-200: #EAE6DB;   /* logo lettering, primary cream surface */
+  --cream-300: #DBD5C5;
+  --cream-400: #C7BFA9;
+  --cream-500: #AEA489;   /* muted cream / disabled ink on cream */
+
+  /* --- Ink (outlines & definition, near-black with a green tint) --- */
+  --ink-950: #0C0D0B;
+  --ink-900: #14140F;     /* the outline black */
+  --ink-800: #1F211A;
+  --ink-700: #2C2E25;
+
+  /* --- Paint pops (real pigments, used sparingly like splashes) --- */
+  --mustard:        #E8B23C;
+  --mustard-deep:   #C9912A;
+  --mustard-soft:   #F2CE78;
+
+  --terracotta:     #C8593A;
+  --terracotta-deep:#A5462C;
+  --terracotta-soft:#E08C6E;
+
+  --teal:           #2FA39B;
+  --teal-deep:      #1E7B74;
+  --teal-soft:      #6FC4BD;
+
+  /* extended pigments for variety (jungle clay & moss) */
+  --olive:          #8A9A47;
+  --olive-deep:     #6C7A35;
+  --clay-pink:      #D98A8A;
+  --plum:           #7C4A63;
+
+  /* ============================================================
+     SEMANTIC ALIASES — reach for these in components
+     ============================================================ */
+  /* Backgrounds & surfaces */
+  --surface-bg:        var(--swamp-700);   /* page */
+  --surface-bg-deep:   var(--swamp-900);   /* recessed wells */
+  --surface-raised:    var(--swamp-600);   /* panels on dark */
+  --surface-card:      var(--cream-200);   /* cream cards / paper */
+  --surface-card-alt:  var(--cream-100);
+
+  /* Text */
+  --text-on-dark:        var(--cream-200);
+  --text-on-dark-muted:  #A9B8B2;          /* desaturated cream-green */
+  --text-on-dark-faint:  #6E847E;
+  --text-on-light:       var(--ink-900);
+  --text-on-light-muted: #5C5A4E;
+
+  /* Lines & outlines */
+  --border-ink:    var(--ink-900);
+  --border-hair:   var(--swamp-400);       /* subtle divider on dark */
+  --border-cream:  var(--cream-400);       /* divider on cream */
+
+  /* Actions */
+  --accent-primary:      var(--mustard);   /* main CTA */
+  --accent-primary-deep: var(--mustard-deep);
+  --accent-secondary:    var(--teal);
+  --accent-tertiary:     var(--terracotta);
+
+  /* Status */
+  --status-success: var(--teal);
+  --status-warning: var(--mustard);
+  --status-danger:  var(--terracotta);
+  --status-info:    var(--swamp-300);
+
+  /* Focus ring */
+  --focus-ring: var(--mustard-soft);
+}

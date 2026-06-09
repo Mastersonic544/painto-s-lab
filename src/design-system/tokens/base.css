@@ -1,0 +1,75 @@
+/* ============================================================
+   Painto's Lab — Base layer
+   Light reset + brand defaults. Sets the swamp ground and cream
+   text as the default world. Provides a couple of texture
+   helpers (watercolor wash, paper grain, splat blobs).
+   ============================================================ */
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  font: var(--text-body);
+  color: var(--text-on-dark);
+  background-color: var(--surface-bg);
+  /* Layered watercolor wash so the ground never reads as a flat fill */
+  background-image:
+    radial-gradient(120% 90% at 12% -10%, rgba(42, 115, 107, 0.45) 0%, transparent 55%),
+    radial-gradient(90% 80% at 108% 8%, rgba(8, 40, 38, 0.65) 0%, transparent 60%),
+    radial-gradient(80% 70% at 80% 120%, rgba(27, 92, 86, 0.40) 0%, transparent 60%);
+  background-attachment: fixed;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+h1, h2, h3, h4 {
+  font-family: var(--font-display);
+  font-weight: var(--fw-bold);
+  line-height: var(--lh-snug);
+  letter-spacing: var(--ls-display);
+  margin: 0 0 0.4em;
+}
+
+p { margin: 0 0 1em; text-wrap: pretty; }
+
+a { color: var(--teal-soft); text-decoration-thickness: 2px; text-underline-offset: 2px; }
+
+::selection { background: var(--mustard); color: var(--ink-900); }
+
+:focus-visible {
+  outline: none;
+  box-shadow: var(--glow-focus);
+}
+
+/* ---- Texture helpers ------------------------------------- */
+
+/* Subtle paper grain for cream surfaces */
+.pl-paper {
+  background-color: var(--surface-card);
+  background-image:
+    radial-gradient(rgba(20, 20, 15, 0.035) 1px, transparent 1px);
+  background-size: 4px 4px;
+}
+
+/* An eyebrow / mono label */
+.pl-label {
+  font-family: var(--font-mono);
+  font-weight: var(--fw-bold);
+  font-size: var(--fs-2xs);
+  letter-spacing: var(--ls-label);
+  text-transform: uppercase;
+}
+
+/* A hand-drawn ink-outlined sticker block */
+.pl-sticker {
+  border: var(--outline-ink);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sticker);
+}
+
+/* Irregular paint-splat blob */
+.pl-blob {
+  border-radius: var(--blob-1);
+}

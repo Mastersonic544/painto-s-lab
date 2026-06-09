@@ -1,0 +1,31 @@
+/* ============================================================
+   Painto's Lab — Shape: radii, borders & blob shapes
+   Soft rounded corners everywhere; thick ink outlines; a few
+   irregular organic "blob" shapes for splats and stickers.
+   ============================================================ */
+:root {
+  /* Corner radii (soft, generous) */
+  --radius-xs:  6px;
+  --radius-sm:  10px;
+  --radius-md:  16px;
+  --radius-lg:  24px;
+  --radius-xl:  34px;
+  --radius-2xl: 46px;
+  --radius-pill: 999px;
+
+  /* Border widths — the hand-drawn ink outline */
+  --border-thin:  2px;
+  --border:       3px;
+  --border-thick: 4px;
+  --border-chunky:6px;
+
+  /* Composed outline shorthands */
+  --outline-ink:       var(--border) solid var(--ink-900);
+  --outline-ink-thick: var(--border-thick) solid var(--ink-900);
+
+  /* Irregular organic blobs (for splats, sticker stamps, avatars) */
+  --blob-1: 42% 58% 63% 37% / 41% 44% 56% 59%;
+  --blob-2: 63% 37% 38% 62% / 49% 57% 43% 51%;
+  --blob-3: 38% 62% 56% 44% / 56% 39% 61% 44%;
+  --blob-soft: 48% 52% 53% 47% / 50% 49% 51% 50%;
+}

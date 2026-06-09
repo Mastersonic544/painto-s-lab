@@ -1,0 +1,28 @@
+/* ============================================================
+   Painto's Lab — Elevation (sticker shadows)
+   The house style is a HARD offset shadow (like a die-cut
+   sticker or a printed comic), not a soft uniform blur. A
+   couple of soft ambient shadows exist for floating panels on
+   the dark swamp ground.
+   ============================================================ */
+:root {
+  /* Hard "sticker" offsets — colored with ink */
+  --shadow-sticker-xs: 2px 2px 0 0 var(--ink-900);
+  --shadow-sticker-sm: 3px 3px 0 0 var(--ink-900);
+  --shadow-sticker:    5px 5px 0 0 var(--ink-900);
+  --shadow-sticker-lg: 8px 8px 0 0 var(--ink-900);
+
+  /* Pressed state — shadow collapses, element settles down */
+  --shadow-sticker-press: 1px 1px 0 0 var(--ink-900);
+
+  /* Soft ambient (use sparingly, for floating panels / modals) */
+  --shadow-soft-sm: 0 6px 16px rgba(6, 28, 26, 0.35);
+  --shadow-soft:    0 14px 34px rgba(6, 28, 26, 0.45);
+  --shadow-soft-lg: 0 28px 64px rgba(6, 28, 26, 0.55);
+
+  /* Inner shade for wells / recessed inputs on cream */
+  --shadow-inset: inset 0 2px 0 0 rgba(20, 20, 15, 0.10);
+
+  /* Glow used only on liquid/focus accents */
+  --glow-focus: 0 0 0 4px var(--focus-ring);
+}

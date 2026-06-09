@@ -1,0 +1,8 @@
+/* Painto's Lab design system — loaded once, globally.
+   Order matters: tokens + fonts before Tailwind so utilities resolve
+   against CSS variables that already exist on :root. */
+@import './design-system/styles.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
