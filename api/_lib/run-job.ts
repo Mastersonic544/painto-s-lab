@@ -28,6 +28,8 @@ export interface RunJobOptions {
   resizeMaxEdge?: number;
   /** Engine "remove facets smaller than N points" threshold. */
   minFacetSize?: number;
+  /** Hard cap on the number of regions (facets). */
+  maxFacets?: number;
 }
 
 export interface RunJobResult {
@@ -84,11 +86,18 @@ export async function runGenerationJob(
   // keeping us inside the function timeout — larger images quickly
   // run past 60s. Larger inputs belong on the dedicated worker.
   const seed = derivePieceSeed(piece.id);
-  const resizeMaxEdge = opts.resizeMaxEdge ?? 768;
+  // Tuned so the job finishes within a modest backend's CPU/RAM. Without a
+  // facet cap the engine produced 30k+ regions (unpaintable, and it pegged the
+  // CPU / exhausted memory for 10+ minutes — Render then killed it mid-job).
+  // A paint-by-numbers kit wants hundreds of regions, so: smaller working
+  // resolution, hard facet cap, drop tiny specks, single narrow-strip pass.
+  const resizeMaxEdge = opts.resizeMaxEdge ?? 640;
   const result = await generatePaintByNumbers(buf, {
     colorCount: piece.color_count,
     randomSeed: seed,
-    minFacetSize: opts.minFacetSize ?? 24,
+    minFacetSize: opts.minFacetSize ?? 48,
+    maxFacets: opts.maxFacets ?? 3500,
+    narrowPixelStripCleanupRuns: 1,
     resizeMaxWidth: resizeMaxEdge,
     resizeMaxHeight: resizeMaxEdge,
   });

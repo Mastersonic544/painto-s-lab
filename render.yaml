@@ -9,10 +9,15 @@ services:
   - type: web
     name: paintos-converter
     runtime: node
-    plan: free # free sleeps when idle (~30s cold start). Use 'starter' for always-on.
+    # 'free' has 0.1 shared CPU / 512MB — tight for the engine. 'starter' is
+    # strongly recommended so conversions don't crawl or OOM.
+    plan: free
     buildCommand: npm install
     startCommand: npm run converter
-    healthCheckPath: /health
+    # No healthCheckPath on purpose: the conversion is CPU-bound and blocks the
+    # event loop, so an HTTP health check would time out mid-job and Render
+    # would restart the service, killing the conversion. Render still verifies
+    # the port is bound at deploy. /health remains available for manual checks.
     autoDeploy: true
     envVars:
       - key: SUPABASE_URL
