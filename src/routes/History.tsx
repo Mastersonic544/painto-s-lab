@@ -2,8 +2,9 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import Button from '../components/ui/Button';
 import Card, { CardEyebrow } from '../components/ui/Card';
+import IconButton from '../components/ui/IconButton';
 import Spinner from '../components/ui/Spinner';
-import { BatchHistoryEntry, listCheckoutHistory } from '../lib/cart';
+import { BatchHistoryEntry, deleteCheckoutBatch, listCheckoutHistory } from '../lib/cart';
 import { signedUrl } from '../lib/pieces';
 
 export default function History() {
@@ -11,16 +12,33 @@ export default function History() {
   const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [thumbs, setThumbs] = useState<Record<string, string>>({});
+  const [removing, setRemoving] = useState<string | null>(null);
+
+  const reload = useCallback(async () => {
+    try {
+      setEntries(await listCheckoutHistory());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }, []);
 
   useEffect(() => {
-    (async () => {
-      try {
-        setEntries(await listCheckoutHistory());
-      } catch (err) {
-        setError(err instanceof Error ? err.message : String(err));
-      }
-    })();
-  }, []);
+    reload();
+  }, [reload]);
+
+  async function removeBatch(cartId: string) {
+    if (!confirm('Remove this batch from history? The pieces stay in the Hub.')) return;
+    setRemoving(cartId);
+    setError(null);
+    try {
+      await deleteCheckoutBatch(cartId);
+      await reload();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setRemoving(null);
+    }
+  }
 
   const signBatch = useCallback(
     async (entry: BatchHistoryEntry) => {
@@ -97,23 +115,34 @@ export default function History() {
             const open = expanded.has(e.cart.id);
             return (
               <Card key={e.cart.id} paper sticker>
-                <button
-                  type="button"
-                  onClick={() => toggle(e)}
-                  aria-expanded={open}
-                  className="w-full flex items-center gap-4 text-left"
-                >
-                  <span className="font-display font-bold text-h3 text-text-on-light">
-                    {fmtDate(e.cart.checked_out_at)}
-                  </span>
-                  <span className="pl-label text-text-on-light-muted">
-                    {e.items.length} piece{e.items.length === 1 ? '' : 's'} · {e.colorCount} color
-                    {e.colorCount === 1 ? '' : 's'} · {e.totalMl} ml
-                  </span>
-                  <span className="ml-auto font-mono text-text-on-light-muted">
-                    {open ? '▲' : '▼'}
-                  </span>
-                </button>
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => toggle(e)}
+                    aria-expanded={open}
+                    className="flex-1 flex items-center gap-4 text-left min-w-0"
+                  >
+                    <span className="font-display font-bold text-h3 text-text-on-light shrink-0">
+                      {fmtDate(e.cart.checked_out_at)}
+                    </span>
+                    <span className="pl-label text-text-on-light-muted truncate">
+                      {e.items.length} piece{e.items.length === 1 ? '' : 's'} · {e.colorCount} color
+                      {e.colorCount === 1 ? '' : 's'} · {e.totalMl} ml
+                    </span>
+                    <span className="ml-auto font-mono text-text-on-light-muted shrink-0">
+                      {open ? '▲' : '▼'}
+                    </span>
+                  </button>
+                  <IconButton
+                    label="Remove batch from history"
+                    size="sm"
+                    variant="tertiary"
+                    disabled={removing === e.cart.id}
+                    onClick={() => removeBatch(e.cart.id)}
+                  >
+                    ×
+                  </IconButton>
+                </div>
 
                 {open && (
                   <div className="mt-4 border-t border-cream-300 pt-4 flex flex-col gap-4">

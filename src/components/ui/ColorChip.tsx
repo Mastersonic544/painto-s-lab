@@ -1,7 +1,13 @@
 import { useId, useState } from 'react';
 import { cn } from '../../lib/cn';
+import { hexToRgb } from '../../lib/paintMath';
 import type { BasePaint, RecipeDisplay, RecipeKind } from '../../lib/recipes';
 import type { ColorRecipe } from '../../lib/recipes';
+
+function rgbLabel(hex: string): string {
+  const rgb = hexToRgb(hex);
+  return rgb ? `rgb(${rgb[0]}, ${rgb[1]}, ${rgb[2]})` : '';
+}
 
 export interface ColorChipProps {
   hex: string;
@@ -109,16 +115,21 @@ function RecipePopover({
         'pl-toast-bloom',
       )}
     >
-      <div className="flex items-center gap-2 mb-2">
-        <span
-          className="h-5 w-5 rounded-full border border-ink-900 shrink-0"
-          style={{ background: hex }}
-        />
-        <span className="font-mono font-bold text-xs">{hex.toUpperCase()}</span>
-        {typeof totalMl === 'number' && (
-          <span className="font-mono text-xs ml-auto">{formatMl(totalMl)}</span>
-        )}
-        <RecipeKindBadge kind={kind} />
+      <div className="mb-2">
+        <div className="flex items-center gap-2">
+          <span
+            className="h-5 w-5 rounded-full border border-ink-900 shrink-0"
+            style={{ background: hex }}
+          />
+          <span className="font-mono font-bold text-xs">{hex.toUpperCase()}</span>
+          {typeof totalMl === 'number' && (
+            <span className="font-mono text-xs ml-auto">{formatMl(totalMl)}</span>
+          )}
+          <RecipeKindBadge kind={kind} />
+        </div>
+        <div className="font-mono text-2xs text-text-on-light-muted mt-1 pl-7">
+          {rgbLabel(hex)}
+        </div>
       </div>
 
       {recipe?.kind === 'verified-near' && recipe.matchedHex && (
@@ -132,11 +143,18 @@ function RecipePopover({
           {recipe.steps.map((s) => (
             <li key={s.base_paint_id} className="flex items-center gap-2">
               <span
-                className="h-3 w-3 rounded-full border border-ink-900"
+                className="h-3 w-3 rounded-full border border-ink-900 shrink-0"
                 style={{ background: s.base?.rgb_hex ?? '#888' }}
               />
-              <span className="flex-1 truncate">{s.base?.name ?? 'Unknown base'}</span>
-              <span className="font-mono text-xs">{formatMl(s.ml)}</span>
+              <div className="flex-1 min-w-0">
+                <div className="truncate">{s.base?.name ?? 'Unknown base'}</div>
+                {s.base && (
+                  <div className="font-mono text-2xs text-text-on-light-muted truncate">
+                    {s.base.rgb_hex.toUpperCase()} · {rgbLabel(s.base.rgb_hex)}
+                  </div>
+                )}
+              </div>
+              <span className="font-mono text-xs shrink-0">{formatMl(s.ml)}</span>
             </li>
           ))}
         </ul>

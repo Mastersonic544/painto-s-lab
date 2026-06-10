@@ -11,6 +11,8 @@ import { supabase } from '../lib/supabase';
 import {
   BasePaint,
   BasePaintInput,
+  ReorderItem,
+  buildReorderList,
   createBasePaint,
   deleteBasePaint,
   isLowStock,
@@ -19,6 +21,8 @@ import {
   topUpBasePaint,
   updateBasePaint,
 } from '../lib/stock';
+import { getCartRollup, getOpenCartCount } from '../lib/cart';
+import { computeBaseUsage, resolveRecipes } from '../lib/recipes';
 
 type DialogMode =
   | { kind: 'add' }
@@ -31,6 +35,36 @@ export default function Stock() {
   const [error, setError] = useState<string | null>(null);
   const [dialog, setDialog] = useState<DialogMode>({ kind: 'closed' });
   const [seeding, setSeeding] = useState(false);
+  const [reorderOpen, setReorderOpen] = useState(false);
+  const [reorder, setReorder] = useState<ReorderItem[] | null>(null);
+
+  async function openReorder() {
+    setReorderOpen(true);
+    setReorder(null); // loading
+    setError(null);
+    try {
+      const list = bases ?? [];
+      const usage = new Map<string, number>();
+      const { cartId } = await getOpenCartCount();
+      if (cartId && list.length) {
+        const rollup = await getCartRollup(cartId);
+        const recipes = await resolveRecipes(
+          rollup.map((r) => r.rgbHex),
+          list,
+        );
+        const u = computeBaseUsage(
+          rollup.map((r) => ({ rgbHex: r.rgbHex, volumeMl: r.totalMl })),
+          recipes,
+          list,
+        );
+        for (const [k, v] of u) usage.set(k, v);
+      }
+      setReorder(buildReorderList(list, usage));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      setReorderOpen(false);
+    }
+  }
 
   async function addStarterSet() {
     setSeeding(true);
@@ -93,6 +127,9 @@ export default function Stock() {
               {lowCount} low · top up soon
             </Badge>
           )}
+          <Button variant="ghost" onClick={openReorder} disabled={!bases}>
+            Shopping list
+          </Button>
           <Button variant="secondary" onClick={addStarterSet} loading={seeding}>
             + Starter set
           </Button>
@@ -182,8 +219,123 @@ export default function Stock() {
           }}
         />
       )}
+
+      <Dialog
+        open={reorderOpen}
+        onClose={() => setReorderOpen(false)}
+        title="Shopping list"
+        description="Base paints to restock — anything low, plus what the current cart batch will run short on."
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setReorderOpen(false)}>
+              Close
+            </Button>
+            <Button
+              onClick={() => reorder && printShoppingList(reorder)}
+              disabled={!reorder || reorder.length === 0}
+            >
+              Print / Save PDF
+            </Button>
+          </>
+        }
+      >
+        {reorder === null ? (
+          <div className="py-8 grid place-items-center">
+            <Spinner size="md" />
+          </div>
+        ) : reorder.length === 0 ? (
+          <p className="text-text-on-light">Everything's stocked. Nothing to buy right now.</p>
+        ) : (
+          <ul className="flex flex-col gap-2 max-h-[50vh] overflow-auto">
+            {reorder.map((it) => (
+              <li
+                key={it.base.id}
+                className="flex items-center gap-3 border-thick border-ink-900 rounded-md bg-cream-50 p-2"
+              >
+                <span
+                  className="h-7 w-7 rounded-md border border-ink-900 shrink-0"
+                  style={{ background: it.base.rgb_hex }}
+                />
+                <div className="flex-1 min-w-0">
+                  <div className="font-display font-bold text-text-on-light truncate">
+                    {it.base.name}
+                  </div>
+                  <div className="pl-label text-text-on-light-muted">
+                    have {Math.round(it.base.current_level_ml)} / {it.base.container_capacity_ml} ml
+                    {it.cartNeedMl > 0 && ` · batch needs ${Math.ceil(it.cartNeedMl)} ml`}
+                  </div>
+                </div>
+                <div className="flex flex-col items-end gap-1 shrink-0">
+                  <span className="font-mono font-bold text-text-on-light whitespace-nowrap">
+                    buy ~{it.buyMl} ml
+                  </span>
+                  <div className="flex gap-1">
+                    {it.reasons.includes('low') && (
+                      <span className="pl-label bg-mustard-soft text-ink-900 rounded-pill px-2 py-0.5">
+                        low
+                      </span>
+                    )}
+                    {it.reasons.includes('batch') && (
+                      <span className="pl-label bg-terracotta text-cream-50 rounded-pill px-2 py-0.5">
+                        batch
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Dialog>
     </div>
   );
+}
+
+// Escape text interpolated into the print HTML.
+function escHtml(s: string): string {
+  return s.replace(/[&<>"']/g, (c) =>
+    c === '&' ? '&amp;' : c === '<' ? '&lt;' : c === '>' ? '&gt;' : c === '"' ? '&quot;' : '&#39;',
+  );
+}
+
+// Printable shopping list → the browser print dialog ("Save as PDF").
+function printShoppingList(items: ReorderItem[]) {
+  const rows = items
+    .map(
+      (it) => `<tr>
+        <td><span class="sw" style="background:${escHtml(it.base.rgb_hex)}"></span></td>
+        <td>${escHtml(it.base.name)}</td>
+        <td class="mono">${escHtml(it.base.rgb_hex).toUpperCase()}</td>
+        <td class="mono r">${Math.round(it.base.current_level_ml)} / ${it.base.container_capacity_ml} ml</td>
+        <td class="mono r"><strong>${it.buyMl} ml</strong></td>
+      </tr>`,
+    )
+    .join('');
+  const html = `<!doctype html><html><head><meta charset="utf-8" />
+<title>Painto's Lab — shopping list</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: Georgia, serif; color: #14140f; margin: 32px; }
+  h1 { font-size: 22px; margin: 0 0 16px; }
+  table { border-collapse: collapse; width: 100%; }
+  th, td { border: 2px solid #14140f; padding: 8px 10px; text-align: left; font-size: 13px; }
+  th { background: #eae6db; font-family: ui-monospace, monospace; text-transform: uppercase; letter-spacing: 1px; font-size: 11px; }
+  .sw { display: inline-block; width: 30px; height: 20px; border: 2px solid #14140f; border-radius: 3px; }
+  .mono { font-family: ui-monospace, monospace; }
+  .r { text-align: right; }
+  @media print { body { margin: 12mm; } }
+</style></head><body>
+  <h1>Painto's Lab — base paint shopping list</h1>
+  <table>
+    <thead><tr><th></th><th>Paint</th><th>Hex</th><th>In stock</th><th>Buy</th></tr></thead>
+    <tbody>${rows}</tbody>
+  </table>
+  <script>window.onload = function(){ setTimeout(function(){ window.print(); }, 150); };</script>
+</body></html>`;
+  const w = window.open('', '_blank');
+  if (!w) return;
+  w.document.write(html);
+  w.document.close();
 }
 
 function StockCard({

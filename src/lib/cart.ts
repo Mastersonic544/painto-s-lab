@@ -265,6 +265,20 @@ export async function listCheckoutHistory(): Promise<BatchHistoryEntry[]> {
   return out;
 }
 
+/**
+ * Remove a past batch from history: deletes the cart's mix tasks and item
+ * links, then the cart. The pieces themselves are untouched (they live in the
+ * Hub), so this only clears the batch record.
+ */
+export async function deleteCheckoutBatch(cartId: string): Promise<void> {
+  const t = await supabase.from('mix_tasks').delete().eq('cart_id', cartId);
+  if (t.error) throw t.error;
+  const i = await supabase.from('cart_items').delete().eq('cart_id', cartId);
+  if (i.error) throw i.error;
+  const c = await supabase.from('carts').delete().eq('id', cartId);
+  if (c.error) throw c.error;
+}
+
 /** Sum of quantities in the open cart, 0 if none. */
 export async function getOpenCartCount(): Promise<{ cartId: string | null; count: number }> {
   const { data: cart, error: cartErr } = await supabase

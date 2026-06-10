@@ -100,3 +100,41 @@ export async function topUpBasePaint(id: string, addMl: number): Promise<BasePai
 export function isLowStock(b: BasePaint): boolean {
   return b.current_level_ml <= b.reorder_threshold_ml;
 }
+
+export interface ReorderItem {
+  base: BasePaint;
+  /** ml the current cart batch demands of this base (0 if none). */
+  cartNeedMl: number;
+  /** Recommended amount to buy, in ml (rounded up). */
+  buyMl: number;
+  /** Why it's on the list: below reorder threshold and/or short for the batch. */
+  reasons: Array<'low' | 'batch'>;
+}
+
+/**
+ * Build a consolidated shopping list. A base lands on it if it's below its
+ * reorder threshold OR the current cart batch needs more than is in stock.
+ * Recommended buy refills to the container capacity, or to the batch demand
+ * if that's larger. `cartUsage` is ml-per-base for the open cart (empty Map
+ * if there's no cart).
+ */
+export function buildReorderList(
+  bases: BasePaint[],
+  cartUsage: Map<string, number>,
+): ReorderItem[] {
+  const items: ReorderItem[] = [];
+  for (const base of bases) {
+    const need = cartUsage.get(base.id) ?? 0;
+    const low = base.current_level_ml <= base.reorder_threshold_ml;
+    const short = need > base.current_level_ml;
+    if (!low && !short) continue;
+    const target = Math.max(base.container_capacity_ml, need);
+    const buyMl = Math.max(0, Math.ceil(target - base.current_level_ml));
+    if (buyMl <= 0) continue;
+    const reasons: Array<'low' | 'batch'> = [];
+    if (low) reasons.push('low');
+    if (short) reasons.push('batch');
+    items.push({ base, cartNeedMl: need, buyMl, reasons });
+  }
+  return items.sort((a, b) => b.buyMl - a.buyMl);
+}

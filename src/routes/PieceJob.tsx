@@ -388,12 +388,20 @@ function ReviewArea(props: {
     if (!el) return setFeedback('Preview still loading.');
     save(`${slug}-template.svg`, new XMLSerializer().serializeToString(el));
   }
-  // 3. Colors + numbers — lay the outline's borders/labels over the fills.
+  // 3. Colors + numbers — faint color guide (30%) under the black outline +
+  //    numbers, matching the printed templates you get at the store.
   function downloadColorsNumbers() {
     const filled = svgOf(sliderRef.current?.getFilledRoot() ?? null);
     const outline = svgOf(sliderRef.current?.getOutlineRoot() ?? null);
     if (!filled || !outline) return setFeedback('Preview still loading.');
     const composite = filled.cloneNode(true) as SVGSVGElement;
+    // Wrap the color paths in a 30%-opacity group so they read as a tint.
+    const ns = 'http://www.w3.org/2000/svg';
+    const tint = document.createElementNS(ns, 'g');
+    tint.setAttribute('opacity', '0.3');
+    while (composite.firstChild) tint.appendChild(composite.firstChild);
+    composite.appendChild(tint);
+    // Overlay the borders + numbers at full strength.
     outline.childNodes.forEach((n) => composite.appendChild(n.cloneNode(true)));
     save(`${slug}-colors-numbers.svg`, new XMLSerializer().serializeToString(composite));
   }

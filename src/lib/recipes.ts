@@ -153,6 +153,59 @@ export function estimateRecipeFromBases(
   }));
 }
 
+function rgbToHex(rgb: [number, number, number]): string {
+  return (
+    '#' +
+    rgb
+      .map((v) => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, '0'))
+      .join('')
+  );
+}
+
+export interface SubstituteSuggestion {
+  steps: RecipeStep[];
+  /** Approximate color of the suggested mix (weighted average of bases). */
+  approxHex: string;
+  /** RGB distance from the approximation to the target (lower = closer). */
+  distance: number;
+}
+
+/**
+ * In-a-pinch substitute: approximate `targetHex` by mixing only base paints
+ * the operator currently has stock for (> 0 ml), excluding any short/empty
+ * ones — so they can check out without buying more. Returns the mix (parts),
+ * the approximate resulting color, and how close it lands.
+ */
+export function suggestInStockSubstitute(
+  targetHex: string,
+  bases: BasePaint[],
+  excludeIds: Set<string> = new Set(),
+): SubstituteSuggestion | null {
+  const usable = bases.filter((b) => b.current_level_ml > 0 && !excludeIds.has(b.id));
+  const steps = estimateRecipeFromBases(targetHex, usable);
+  if (!steps || steps.length === 0) return null;
+  const byId = new Map(usable.map((b) => [b.id, b]));
+  let r = 0;
+  let g = 0;
+  let bl = 0;
+  let tot = 0;
+  for (const s of steps) {
+    const base = byId.get(s.base_paint_id);
+    const rgb = base ? hexToRgb(base.rgb_hex) : null;
+    if (!rgb) continue;
+    const w = s.parts ?? 0;
+    r += rgb[0] * w;
+    g += rgb[1] * w;
+    bl += rgb[2] * w;
+    tot += w;
+  }
+  if (tot <= 0) return null;
+  const approxHex = rgbToHex([r / tot, g / tot, bl / tot]);
+  const t = hexToRgb(targetHex);
+  const a = hexToRgb(approxHex);
+  return { steps, approxHex, distance: t && a ? rgbDistance(t, a) : 999 };
+}
+
 /** Find the closest verified recipe to `targetHex`, within tolerance. */
 export function findNearestVerifiedRecipe(
   targetHex: string,

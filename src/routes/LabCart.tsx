@@ -25,6 +25,8 @@ import {
   fetchBasePaints,
   findShortfalls,
   resolveRecipes,
+  suggestInStockSubstitute,
+  upsertRecipe,
 } from '../lib/recipes';
 
 export default function LabCart() {
@@ -157,6 +159,37 @@ export default function LabCart() {
     return findShortfalls(usage, bases);
   }, [rollup, recipes, bases]);
 
+  // For each target color whose recipe needs a short/empty base, suggest a
+  // substitute mixed only from base paints we have in stock — so the operator
+  // can get close without buying more.
+  const substitutions = useMemo(() => {
+    const shortIds = new Set(shortfalls.map((s) => s.base.id));
+    if (!shortIds.size) return [];
+    const out: Array<{ rgbHex: string; suggestion: ReturnType<typeof suggestInStockSubstitute> }> =
+      [];
+    for (const r of rollup) {
+      const resolved = recipes.get(r.rgbHex);
+      if (!resolved) continue;
+      if (!resolved.steps.some((s) => shortIds.has(s.base_paint_id))) continue;
+      const suggestion = suggestInStockSubstitute(r.rgbHex, bases, shortIds);
+      if (suggestion) out.push({ rgbHex: r.rgbHex, suggestion });
+    }
+    return out;
+  }, [rollup, recipes, bases, shortfalls]);
+
+  async function applySubstitute(rgbHex: string, suggestion: NonNullable<ReturnType<typeof suggestInStockSubstitute>>) {
+    setBusy(`sub:${rgbHex}`);
+    setError(null);
+    try {
+      await upsertRecipe({ targetRgbHex: rgbHex, steps: suggestion.steps, isVerified: false });
+      await reload();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(null);
+    }
+  }
+
   if (cartLoading || items === null) {
     return (
       <div className="min-h-[40vh] grid place-items-center">
@@ -279,6 +312,80 @@ export default function LabCart() {
                     → top up in Stock
                   </Link>
                 </div>
+              </Card>
+            )}
+
+            {substitutions.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardEyebrow>Substitute in a pinch</CardEyebrow>
+                  <CardTitle>Mix what you have instead</CardTitle>
+                </CardHeader>
+                <p className="text-text-on-light text-sm mb-3">
+                  These colors need a base you're short on. Swap in a mix of in-stock paints to get
+                  close and check out without buying more.
+                </p>
+                <ul className="flex flex-col gap-3">
+                  {substitutions.map(({ rgbHex, suggestion }) => {
+                    if (!suggestion) return null;
+                    const close = suggestion.distance <= 24;
+                    return (
+                      <li
+                        key={rgbHex}
+                        className="flex flex-col gap-2 border-thick border-ink-900 rounded-md bg-cream-50 p-3"
+                      >
+                        <div className="flex items-center gap-2">
+                          <span
+                            className="h-6 w-6 rounded-md border border-ink-900 shrink-0"
+                            style={{ background: rgbHex }}
+                          />
+                          <span className="font-mono text-xs">{rgbHex.toUpperCase()}</span>
+                          <span className="pl-label text-text-on-light-muted">→</span>
+                          <span
+                            className="h-6 w-6 rounded-md border border-ink-900 shrink-0"
+                            style={{ background: suggestion.approxHex }}
+                            title="approximate result"
+                          />
+                          <span className="font-mono text-xs">
+                            {suggestion.approxHex.toUpperCase()}
+                          </span>
+                          <span
+                            className={`pl-label rounded-pill px-2 py-0.5 ml-auto ${
+                              close ? 'bg-teal text-cream-50' : 'bg-mustard-soft text-ink-900'
+                            }`}
+                          >
+                            {close ? 'close' : 'rough'}
+                          </span>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                          {suggestion.steps.map((s) => {
+                            const base = bases.find((b) => b.id === s.base_paint_id);
+                            return (
+                              <span
+                                key={s.base_paint_id}
+                                className="inline-flex items-center gap-1 text-xs text-text-on-light"
+                              >
+                                <span
+                                  className="h-3 w-3 rounded-full border border-ink-900"
+                                  style={{ background: base?.rgb_hex ?? '#888' }}
+                                />
+                                {base?.name ?? 'base'} · {Math.round((s.parts ?? 0) * 100)}%
+                              </span>
+                            );
+                          })}
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          loading={busy === `sub:${rgbHex}`}
+                          onClick={() => applySubstitute(rgbHex, suggestion)}
+                        >
+                          Use this mix
+                        </Button>
+                      </li>
+                    );
+                  })}
+                </ul>
               </Card>
             )}
 
