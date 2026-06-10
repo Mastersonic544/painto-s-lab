@@ -52,79 +52,170 @@ export interface GenerateOptions {
   edgeEmphasis?: number;
 }
 
-function clamp255(v: number): number {
-  return v < 0 ? 0 : v > 255 ? 255 : v;
+// ----- Portrait line-art pre-pass -------------------------------------------
+// Extract clean feature contours with Canny, thicken them into solid black
+// lines, flatten the colour underneath, then let the facet engine fill between
+// the lines. This is what turns a face into "pencil outline + colour" instead
+// of a blurry blob of clusters.
+
+function gaussBlur(src: Float32Array, w: number, h: number): Float32Array {
+  const k = [1, 4, 6, 4, 1];
+  const tmp = new Float32Array(w * h);
+  const out = new Float32Array(w * h);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      let s = 0;
+      for (let i = -2; i <= 2; i++) {
+        const xx = x + i < 0 ? 0 : x + i >= w ? w - 1 : x + i;
+        s += src[y * w + xx] * k[i + 2];
+      }
+      tmp[y * w + x] = s / 16;
+    }
+  }
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      let s = 0;
+      for (let i = -2; i <= 2; i++) {
+        const yy = y + i < 0 ? 0 : y + i >= h ? h - 1 : y + i;
+        s += tmp[yy * w + x] * k[i + 2];
+      }
+      out[y * w + x] = s / 16;
+    }
+  }
+  return out;
 }
 
-// Unsharp mask: crispen features so clustering keeps them distinct.
-function sharpen(data: Uint8ClampedArray, w: number, h: number, amount: number): void {
-  if (amount <= 0) return;
+function canny(lum: Float32Array, w: number, h: number, lo: number, hi: number): Uint8Array {
+  const b = gaussBlur(lum, w, h);
+  const mag = new Float32Array(w * h);
+  const dir = new Uint8Array(w * h);
+  for (let y = 1; y < h - 1; y++) {
+    for (let x = 1; x < w - 1; x++) {
+      const i = y * w + x;
+      const gx = -b[i - w - 1] - 2 * b[i - 1] - b[i + w - 1] + b[i - w + 1] + 2 * b[i + 1] + b[i + w + 1];
+      const gy = -b[i - w - 1] - 2 * b[i - w] - b[i - w + 1] + b[i + w - 1] + 2 * b[i + w] + b[i + w + 1];
+      mag[i] = Math.sqrt(gx * gx + gy * gy);
+      let ang = (Math.atan2(gy, gx) * 180) / Math.PI;
+      if (ang < 0) ang += 180;
+      dir[i] = ang < 22.5 || ang >= 157.5 ? 0 : ang < 67.5 ? 1 : ang < 112.5 ? 2 : 3;
+    }
+  }
+  // Non-maximum suppression — thin edges to 1px ridges.
+  const nms = new Float32Array(w * h);
+  for (let y = 1; y < h - 1; y++) {
+    for (let x = 1; x < w - 1; x++) {
+      const i = y * w + x;
+      const m = mag[i];
+      let p: number;
+      let q: number;
+      switch (dir[i]) {
+        case 0:
+          p = mag[i - 1];
+          q = mag[i + 1];
+          break;
+        case 1:
+          p = mag[i - w + 1];
+          q = mag[i + w - 1];
+          break;
+        case 2:
+          p = mag[i - w];
+          q = mag[i + w];
+          break;
+        default:
+          p = mag[i - w - 1];
+          q = mag[i + w + 1];
+      }
+      nms[i] = m >= p && m >= q ? m : 0;
+    }
+  }
+  // Double threshold + hysteresis — keep weak edges joined to strong ones.
+  const out = new Uint8Array(w * h);
+  const stack: number[] = [];
+  for (let i = 0; i < w * h; i++) {
+    if (nms[i] >= hi) {
+      out[i] = 1;
+      stack.push(i);
+    }
+  }
+  while (stack.length) {
+    const i = stack.pop() as number;
+    const x = i % w;
+    const y = (i - x) / w;
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        const nx = x + dx;
+        const ny = y + dy;
+        if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+        const j = ny * w + nx;
+        if (!out[j] && nms[j] >= lo) {
+          out[j] = 1;
+          stack.push(j);
+        }
+      }
+    }
+  }
+  return out;
+}
+
+function dilateBin(bin: Uint8Array, w: number, h: number): void {
+  const src = bin.slice();
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      if (src[y * w + x]) continue;
+      let on = false;
+      for (let dy = -1; dy <= 1 && !on; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          const nx = x + dx;
+          const ny = y + dy;
+          if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+          if (src[ny * w + nx]) {
+            on = true;
+            break;
+          }
+        }
+      }
+      if (on) bin[y * w + x] = 1;
+    }
+  }
+}
+
+// 3x3 box blur (one pass) — flattens skin so colour fills read as clean areas.
+function boxBlur(data: Uint8ClampedArray, w: number, h: number): void {
   const src = data.slice();
   for (let y = 1; y < h - 1; y++) {
     for (let x = 1; x < w - 1; x++) {
       const i = (y * w + x) * 4;
-      const up = i - w * 4;
-      const down = i + w * 4;
       for (let c = 0; c < 3; c++) {
-        const v =
-          src[i + c] * (1 + 4 * amount) -
-          amount * (src[up + c] + src[down + c] + src[i - 4 + c] + src[i + 4 + c]);
-        data[i + c] = clamp255(v);
+        let s = 0;
+        for (let dy = -1; dy <= 1; dy++) {
+          for (let dx = -1; dx <= 1; dx++) {
+            s += src[((y + dy) * w + (x + dx)) * 4 + c];
+          }
+        }
+        data[i + c] = s / 9;
       }
     }
   }
 }
 
-// Darken strong edges into thin contour lines (Sobel magnitude), dilated 1px
-// so the lines are ~2px and survive the minimum-facet-size cleanup.
-function darkenEdges(data: Uint8ClampedArray, w: number, h: number, strength: number): void {
-  if (strength <= 0) return;
+// strength 0..1: higher => lower Canny thresholds => more / finer lines.
+function portraitLineArt(data: Uint8ClampedArray, w: number, h: number, strength: number): void {
   const n = w * h;
   const lum = new Float32Array(n);
   for (let i = 0; i < n; i++) {
     lum[i] = 0.299 * data[i * 4] + 0.587 * data[i * 4 + 1] + 0.114 * data[i * 4 + 2];
   }
-  const factor = new Float32Array(n).fill(1);
-  for (let y = 1; y < h - 1; y++) {
-    for (let x = 1; x < w - 1; x++) {
-      const idx = y * w + x;
-      const tl = lum[idx - w - 1];
-      const tc = lum[idx - w];
-      const tr = lum[idx - w + 1];
-      const ml = lum[idx - 1];
-      const mr = lum[idx + 1];
-      const bl = lum[idx + w - 1];
-      const bc = lum[idx + w];
-      const br = lum[idx + w + 1];
-      const gx = -tl - 2 * ml - bl + tr + 2 * mr + br;
-      const gy = -tl - 2 * tc - tr + bl + 2 * bc + br;
-      const mag = Math.abs(gx) + Math.abs(gy);
-      if (mag > 110) {
-        const t = Math.min(1, (mag - 110) / 250);
-        factor[idx] = 1 - strength * t;
-      }
-    }
-  }
-  // Dilate the darkening to neighbours so contours are continuous.
-  const f2 = factor.slice();
-  for (let y = 1; y < h - 1; y++) {
-    for (let x = 1; x < w - 1; x++) {
-      const idx = y * w + x;
-      f2[idx] = Math.min(
-        factor[idx],
-        factor[idx - 1],
-        factor[idx + 1],
-        factor[idx - w],
-        factor[idx + w],
-      );
-    }
-  }
+  const hi = Math.max(40, 150 - 80 * strength);
+  const edges = canny(lum, w, h, hi * 0.4, hi);
+  dilateBin(edges, w, h);
+  // Flatten colour for clean fills, then burn the contours pure black.
+  boxBlur(data, w, h);
+  boxBlur(data, w, h);
   for (let i = 0; i < n; i++) {
-    const f = f2[i];
-    if (f < 1) {
-      data[i * 4] = clamp255(data[i * 4] * f);
-      data[i * 4 + 1] = clamp255(data[i * 4 + 1] * f);
-      data[i * 4 + 2] = clamp255(data[i * 4 + 2] * f);
+    if (edges[i]) {
+      data[i * 4] = 0;
+      data[i * 4 + 1] = 0;
+      data[i * 4 + 2] = 0;
     }
   }
 }
@@ -259,8 +350,7 @@ export async function generatePaintByNumbers(
     const px = imgData.data as unknown as Uint8ClampedArray;
     const edge = options.edgeEmphasis ?? 0;
     if (edge > 0) {
-      sharpen(px, imgData.width, imgData.height, 0.7 * edge);
-      darkenEdges(px, imgData.width, imgData.height, 0.85 * edge);
+      portraitLineArt(px, imgData.width, imgData.height, edge);
     }
     preprocessPixels(px, options.contrastBoost ?? 1, options.saturationBoost ?? 1);
   }

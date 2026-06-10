@@ -101,21 +101,23 @@ export async function runGenerationJob(
   // Env override for quick tuning without a redeploy: CONVERTER_MAX_EDGE.
   const envEdge = Number(process.env.CONVERTER_MAX_EDGE);
   const resizeMaxEdge =
-    opts.resizeMaxEdge ?? (Number.isFinite(envEdge) && envEdge > 0 ? envEdge : portrait ? 560 : 512);
+    opts.resizeMaxEdge ?? (Number.isFinite(envEdge) && envEdge > 0 ? envEdge : portrait ? 480 : 512);
   const genOptions = {
     colorCount: piece.color_count,
     randomSeed: seed,
-    // Portrait keeps finer facets so the drawn feature contours survive.
-    minFacetSize: opts.minFacetSize ?? (portrait ? 16 : 40),
-    maxFacets: opts.maxFacets ?? (portrait ? 4500 : 3000),
+    // Portrait: bigger min facet drops texture noise (keeps only the major
+    // contours) and keeps the job fast on a modest box.
+    minFacetSize: opts.minFacetSize ?? (portrait ? 26 : 40),
+    maxFacets: opts.maxFacets ?? (portrait ? 3500 : 3000),
     narrowPixelStripCleanupRuns: 1,
     resizeMaxWidth: resizeMaxEdge,
     resizeMaxHeight: resizeMaxEdge,
     clusteringColorSpace: (portrait ? 'lab' : 'rgb') as 'lab' | 'rgb',
-    contrastBoost: portrait ? 1.22 : 1,
-    saturationBoost: portrait ? 1.1 : 1,
-    // Sharpen + burn dark contours along eyes/nose/mouth so features read.
-    edgeEmphasis: portrait ? 1 : 0,
+    contrastBoost: portrait ? 1.18 : 1,
+    saturationBoost: portrait ? 1.08 : 1,
+    // Portrait line-art: Canny contours burned black + flattened fills. Tune
+    // line density live with CONVERTER_EDGE (0..1, higher = more lines).
+    edgeEmphasis: portrait ? portraitEdgeStrength() : 0,
   };
 
   // The engine logs verbosely (per reallocated point, per border step). With
@@ -233,6 +235,12 @@ export async function markPieceError(
     // Swallow — there's nothing useful to do if even the error
     // write fails. The original failure has already been logged.
   }
+}
+
+/** Portrait line density, tunable live via CONVERTER_EDGE (0..1). */
+function portraitEdgeStrength(): number {
+  const v = Number(process.env.CONVERTER_EDGE);
+  return Number.isFinite(v) && v > 0 && v <= 1 ? v : 0.6;
 }
 
 /** Stable per-piece seed so re-runs are byte-identical. */
