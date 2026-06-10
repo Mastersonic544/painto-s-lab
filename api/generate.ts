@@ -7,8 +7,18 @@
 // process" when serverless time limits start to bite).
 // =============================================================
 
+import { createClient } from '@supabase/supabase-js';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { getAdmin } from './_lib/admin';
+
+// Inlined (not imported from ./_lib/admin): Vercel's function bundler wasn't
+// including the shared _lib helper, which crashed the function on import.
+function getAdmin() {
+  const url = process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url) throw new Error('SUPABASE_URL (or VITE_SUPABASE_URL) is not set');
+  if (!key) throw new Error('SUPABASE_SERVICE_ROLE_KEY is not set');
+  return createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
+}
 
 export const config = {
   // This function only authenticates and forwards to the Render converter,
