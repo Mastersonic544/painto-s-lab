@@ -94,17 +94,24 @@ export async function runGenerationJob(
   // CPU / exhausted memory for 10+ minutes — Render then killed it mid-job).
   // Portrait mode keeps small high-contrast features (eyes) alive: perceptual
   // LAB clustering, a contrast/saturation pre-pass, smaller facets, higher cap.
-  const resizeMaxEdge = opts.resizeMaxEdge ?? (portrait ? 700 : 640);
+  // Working resolution is THE speed/memory lever (not the canvas DPI). Lower
+  // it aggressively so jobs finish on a modest box. Portrait gets the quality
+  // boost from LAB clustering + a contrast pre-pass rather than from tiny
+  // facets, so it can run at a similar cost to painting.
+  // Env override for quick tuning without a redeploy: CONVERTER_MAX_EDGE.
+  const envEdge = Number(process.env.CONVERTER_MAX_EDGE);
+  const resizeMaxEdge =
+    opts.resizeMaxEdge ?? (Number.isFinite(envEdge) && envEdge > 0 ? envEdge : portrait ? 560 : 512);
   const genOptions = {
     colorCount: piece.color_count,
     randomSeed: seed,
-    minFacetSize: opts.minFacetSize ?? (portrait ? 12 : 48),
-    maxFacets: opts.maxFacets ?? (portrait ? 6000 : 3500),
+    minFacetSize: opts.minFacetSize ?? (portrait ? 24 : 40),
+    maxFacets: opts.maxFacets ?? (portrait ? 3800 : 3000),
     narrowPixelStripCleanupRuns: 1,
     resizeMaxWidth: resizeMaxEdge,
     resizeMaxHeight: resizeMaxEdge,
     clusteringColorSpace: (portrait ? 'lab' : 'rgb') as 'lab' | 'rgb',
-    contrastBoost: portrait ? 1.18 : 1,
+    contrastBoost: portrait ? 1.2 : 1,
     saturationBoost: portrait ? 1.12 : 1,
   };
 
