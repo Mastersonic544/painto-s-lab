@@ -11,8 +11,8 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { getAdmin } from './_lib/admin';
 
 export const config = {
-  // Plenty: vision API round-trip dominates and is usually <10s.
-  maxDuration: 30,
+  // Keep within the Hobby cap; the algorithmic fallback covers any timeout.
+  maxDuration: 10,
 };
 
 type Tier = 'simple' | 'normal' | 'complex';

@@ -1,12 +1,4 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "functions": {
-    "api/generate.ts": {
-      "maxDuration": 10,
-      "includeFiles": "engine/**"
-    },
-    "api/decide-complexity.ts": {
-      "maxDuration": 10
-    }
-  }
+  "rewrites": [{ "source": "/((?!api/).*)", "destination": "/index.html" }]
 }

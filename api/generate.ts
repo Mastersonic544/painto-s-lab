@@ -91,10 +91,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   // Local / no external converter: run inline (works via the Vite dev bridge).
-  // Imported dynamically so the engine + native canvas only load on this path
-  // — never when forwarding (production), which keeps the Vercel bundle lean.
+  // The specifier is built from a variable so Vercel's bundler can't trace it
+  // — the engine + native `canvas` are never pulled into this function's
+  // bundle (they live only on the Render converter). In production CONVERTER_URL
+  // is always set, so this path never runs on Vercel.
   try {
-    const { runGenerationJob } = await import('./_lib/run-job');
+    const runJobModule = ['.', '_lib', 'run-job'].join('/');
+    const { runGenerationJob } = (await import(runJobModule)) as typeof import('./_lib/run-job');
     const result = await runGenerationJob(admin, pieceId);
     return res.status(200).json({ ok: true, ...result });
   } catch (err) {
