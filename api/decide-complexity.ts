@@ -8,9 +8,7 @@
 // =============================================================
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { createClient } from '@supabase/supabase-js';
 import { getAdmin } from './_lib/admin';
-import type { Database } from '../src/types/db';
 
 export const config = {
   // Plenty: vision API round-trip dominates and is usually <10s.
@@ -31,16 +29,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const token = auth.startsWith('Bearer ') ? auth.slice(7) : '';
   if (!token) return res.status(401).json({ error: 'Missing bearer token' });
 
-  const url = process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL;
-  const anonKey = process.env.VITE_SUPABASE_ANON_KEY;
-  if (!url || !anonKey) {
-    return res.status(500).json({ error: 'Supabase URL or anon key not configured' });
+  // Verify the caller with the service-role client — no anon key needed.
+  let admin: ReturnType<typeof getAdmin>;
+  try {
+    admin = getAdmin();
+  } catch (err) {
+    return res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
   }
-  const userClient = createClient<Database>(url, anonKey, {
-    global: { headers: { Authorization: `Bearer ${token}` } },
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
-  const { data: who, error: whoErr } = await userClient.auth.getUser(token);
+  const { data: who, error: whoErr } = await admin.auth.getUser(token);
   if (whoErr || !who?.user) return res.status(401).json({ error: 'Invalid session' });
 
   const openrouterKey = process.env.OPENROUTER_API_KEY;
@@ -51,7 +47,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const admin = getAdmin();
     const { data: source, error: srcErr } = await admin
       .from('source_images')
       .select('*')
