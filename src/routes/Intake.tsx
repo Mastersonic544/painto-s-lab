@@ -205,6 +205,13 @@ export default function Intake() {
               {file && previewUrl ? (
                 <div className="flex flex-col gap-3">
                   <ImageCropper src={previewUrl} onChange={setCrop} />
+                  {renderMode === 'portrait' && (
+                    <p className="text-text-on-light text-sm bg-mustard-soft border-thick border-ink-900 rounded-md px-3 py-2">
+                      <strong className="font-display font-bold">Portrait tip:</strong> crop tight to
+                      the face. Features (eyes, nose, mouth) come out sharp when the face fills the
+                      frame — a small face in a wide shot stays muddy.
+                    </p>
+                  )}
                   <button
                     type="button"
                     onClick={() => {

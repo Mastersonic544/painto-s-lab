@@ -101,13 +101,13 @@ export async function runGenerationJob(
   // Env override for quick tuning without a redeploy: CONVERTER_MAX_EDGE.
   const envEdge = Number(process.env.CONVERTER_MAX_EDGE);
   const resizeMaxEdge =
-    opts.resizeMaxEdge ?? (Number.isFinite(envEdge) && envEdge > 0 ? envEdge : portrait ? 480 : 512);
+    opts.resizeMaxEdge ?? (Number.isFinite(envEdge) && envEdge > 0 ? envEdge : portrait ? 512 : 512);
   const genOptions = {
     colorCount: piece.color_count,
     randomSeed: seed,
     // Portrait: bigger min facet drops texture noise (keeps only the major
     // contours) and keeps the job fast on a modest box.
-    minFacetSize: opts.minFacetSize ?? (portrait ? 20 : 40),
+    minFacetSize: opts.minFacetSize ?? (portrait ? 24 : 40),
     maxFacets: opts.maxFacets ?? (portrait ? 3500 : 3000),
     // Portrait keeps the thin contour lines: 0 = skip narrow-strip cleanup,
     // which would otherwise erase them into dashes.
@@ -115,8 +115,8 @@ export async function runGenerationJob(
     resizeMaxWidth: resizeMaxEdge,
     resizeMaxHeight: resizeMaxEdge,
     clusteringColorSpace: (portrait ? 'lab' : 'rgb') as 'lab' | 'rgb',
-    contrastBoost: portrait ? 1.18 : 1,
-    saturationBoost: portrait ? 1.08 : 1,
+    contrastBoost: portrait ? 1.1 : 1,
+    saturationBoost: portrait ? 1.1 : 1,
     // Portrait line-art: Canny contours burned black + flattened fills. Tune
     // line density live with CONVERTER_EDGE (0..1, higher = more lines).
     edgeEmphasis: portrait ? portraitEdgeStrength() : 0,
@@ -242,7 +242,7 @@ export async function markPieceError(
 /** Portrait line density, tunable live via CONVERTER_EDGE (0..1). */
 function portraitEdgeStrength(): number {
   const v = Number(process.env.CONVERTER_EDGE);
-  return Number.isFinite(v) && v > 0 && v <= 1 ? v : 0.45;
+  return Number.isFinite(v) && v > 0 && v <= 1 ? v : 0.8;
 }
 
 /** Stable per-piece seed so re-runs are byte-identical. */

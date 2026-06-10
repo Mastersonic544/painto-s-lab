@@ -179,40 +179,58 @@ function dilateBin(bin: Uint8Array, w: number, h: number): void {
   }
 }
 
-// 3x3 box blur (one pass) — flattens skin so colour fills read as clean areas.
-function boxBlur(data: Uint8ClampedArray, w: number, h: number): void {
+// 3x3 median (one pass) — flattens skin/noise while keeping edges SHARP, which
+// a box blur would smear. This is what lets the contours come out clean.
+function median3(data: Uint8ClampedArray, w: number, h: number): void {
   const src = data.slice();
+  const win: number[] = [];
   for (let y = 1; y < h - 1; y++) {
     for (let x = 1; x < w - 1; x++) {
       const i = (y * w + x) * 4;
       for (let c = 0; c < 3; c++) {
-        let s = 0;
+        win.length = 0;
         for (let dy = -1; dy <= 1; dy++) {
           for (let dx = -1; dx <= 1; dx++) {
-            s += src[((y + dy) * w + (x + dx)) * 4 + c];
+            win.push(src[((y + dy) * w + (x + dx)) * 4 + c]);
           }
         }
-        data[i + c] = s / 9;
+        win.sort((a, b) => a - b);
+        data[i + c] = win[4];
       }
     }
   }
 }
 
-// strength 0..1: higher => lower Canny thresholds => more / finer lines.
+// strength 0..1: higher => lower Canny threshold => more / finer lines.
 function portraitLineArt(data: Uint8ClampedArray, w: number, h: number, strength: number): void {
+  // Lift shadows (gamma) so dark / backlit faces reveal their internal tones
+  // and features instead of clustering into one muddy dark blob.
+  const lut = new Uint8Array(256);
+  for (let i = 0; i < 256; i++) lut[i] = Math.round(255 * Math.pow(i / 255, 0.72));
+  for (let i = 0; i < data.length; i += 4) {
+    data[i] = lut[data[i]];
+    data[i + 1] = lut[data[i + 1]];
+    data[i + 2] = lut[data[i + 2]];
+  }
+  // Edge-preserving smooth: clean flat fills + crisp feature edges.
+  median3(data, w, h);
+  median3(data, w, h);
   const n = w * h;
   const lum = new Float32Array(n);
   for (let i = 0; i < n; i++) {
     lum[i] = 0.299 * data[i * 4] + 0.587 * data[i * 4 + 1] + 0.114 * data[i * 4 + 2];
   }
-  const hi = Math.max(40, 150 - 80 * strength);
+  // Strong unsharp on luma so SOFT features (eyes/nose/mouth) become detectable
+  // edges instead of merging into the surrounding skin.
+  const blur = gaussBlur(lum, w, h);
+  for (let i = 0; i < n; i++) {
+    lum[i] = Math.max(0, Math.min(255, lum[i] + 1.7 * (lum[i] - blur[i])));
+  }
+  const hi = Math.max(28, 100 - 70 * strength);
   const edges = canny(lum, w, h, hi * 0.4, hi);
-  // One dilate → ~3px pencil lines. They stay continuous because portrait mode
+  // One dilate → ~3px pencil lines; they stay continuous because portrait mode
   // skips the engine's narrow-strip cleanup (which would erase them).
   dilateBin(edges, w, h);
-  // Flatten colour for clean fills, then burn the contours pure black.
-  boxBlur(data, w, h);
-  boxBlur(data, w, h);
   for (let i = 0; i < n; i++) {
     if (edges[i]) {
       data[i * 4] = 0;
