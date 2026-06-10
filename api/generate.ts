@@ -21,10 +21,11 @@ function getAdmin() {
 }
 
 export const config = {
-  // This function only authenticates and forwards to the Render converter,
-  // so it's fast — 10s is plenty and keeps it within the Hobby cap. The heavy
-  // engine work runs on the long-running backend (engine/server.ts).
-  maxDuration: 10,
+  // Forwards to the Render converter, which acks fast once awake — but the
+  // free tier cold-starts (~30-50s). Allow up to 60s so the forward survives a
+  // cold start and the job actually reaches Render. (Render acks 202 then runs
+  // in the background, so this only waits for the wake-up, not the conversion.)
+  maxDuration: 60,
 };
 
 // Lightweight failure write — kept here (not imported from run-job) so this
@@ -85,7 +86,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           'x-converter-secret': process.env.CONVERTER_SECRET ?? '',
         },
         body: JSON.stringify({ pieceId }),
-        signal: AbortSignal.timeout(30_000),
+        // Long enough to wake a sleeping free-tier Render instance.
+        signal: AbortSignal.timeout(55_000),
       });
       if (!resp.ok) {
         const text = await resp.text().catch(() => '');

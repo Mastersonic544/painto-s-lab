@@ -21,8 +21,9 @@ function getAdmin() {
 }
 
 export const config = {
-  // Keep within the Hobby cap; the algorithmic fallback covers any timeout.
-  maxDuration: 10,
+  // Vision round-trip can be slow on the free model; the algorithmic fallback
+  // covers any timeout regardless.
+  maxDuration: 25,
 };
 
 type Tier = 'simple' | 'normal' | 'complex';
