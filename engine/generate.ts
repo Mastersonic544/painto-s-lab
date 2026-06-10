@@ -44,6 +44,89 @@ export interface GenerateOptions {
   contrastBoost?: number;
   /** Saturation multiplier applied before clustering (1 = none). */
   saturationBoost?: number;
+  /**
+   * Portrait edge emphasis, 0..1. Sharpens the image and burns dark contour
+   * lines along strong edges (eyes, nose, mouth) before clustering, so the
+   * facet engine draws crisp feature outlines instead of smudging them.
+   */
+  edgeEmphasis?: number;
+}
+
+function clamp255(v: number): number {
+  return v < 0 ? 0 : v > 255 ? 255 : v;
+}
+
+// Unsharp mask: crispen features so clustering keeps them distinct.
+function sharpen(data: Uint8ClampedArray, w: number, h: number, amount: number): void {
+  if (amount <= 0) return;
+  const src = data.slice();
+  for (let y = 1; y < h - 1; y++) {
+    for (let x = 1; x < w - 1; x++) {
+      const i = (y * w + x) * 4;
+      const up = i - w * 4;
+      const down = i + w * 4;
+      for (let c = 0; c < 3; c++) {
+        const v =
+          src[i + c] * (1 + 4 * amount) -
+          amount * (src[up + c] + src[down + c] + src[i - 4 + c] + src[i + 4 + c]);
+        data[i + c] = clamp255(v);
+      }
+    }
+  }
+}
+
+// Darken strong edges into thin contour lines (Sobel magnitude), dilated 1px
+// so the lines are ~2px and survive the minimum-facet-size cleanup.
+function darkenEdges(data: Uint8ClampedArray, w: number, h: number, strength: number): void {
+  if (strength <= 0) return;
+  const n = w * h;
+  const lum = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    lum[i] = 0.299 * data[i * 4] + 0.587 * data[i * 4 + 1] + 0.114 * data[i * 4 + 2];
+  }
+  const factor = new Float32Array(n).fill(1);
+  for (let y = 1; y < h - 1; y++) {
+    for (let x = 1; x < w - 1; x++) {
+      const idx = y * w + x;
+      const tl = lum[idx - w - 1];
+      const tc = lum[idx - w];
+      const tr = lum[idx - w + 1];
+      const ml = lum[idx - 1];
+      const mr = lum[idx + 1];
+      const bl = lum[idx + w - 1];
+      const bc = lum[idx + w];
+      const br = lum[idx + w + 1];
+      const gx = -tl - 2 * ml - bl + tr + 2 * mr + br;
+      const gy = -tl - 2 * tc - tr + bl + 2 * bc + br;
+      const mag = Math.abs(gx) + Math.abs(gy);
+      if (mag > 110) {
+        const t = Math.min(1, (mag - 110) / 250);
+        factor[idx] = 1 - strength * t;
+      }
+    }
+  }
+  // Dilate the darkening to neighbours so contours are continuous.
+  const f2 = factor.slice();
+  for (let y = 1; y < h - 1; y++) {
+    for (let x = 1; x < w - 1; x++) {
+      const idx = y * w + x;
+      f2[idx] = Math.min(
+        factor[idx],
+        factor[idx - 1],
+        factor[idx + 1],
+        factor[idx - w],
+        factor[idx + w],
+      );
+    }
+  }
+  for (let i = 0; i < n; i++) {
+    const f = f2[i];
+    if (f < 1) {
+      data[i * 4] = clamp255(data[i * 4] * f);
+      data[i * 4 + 1] = clamp255(data[i * 4 + 1] * f);
+      data[i * 4 + 2] = clamp255(data[i * 4 + 2] * f);
+    }
+  }
 }
 
 const COLOR_SPACE: Record<'rgb' | 'hsl' | 'lab', ClusteringColorSpace> = {
@@ -171,12 +254,16 @@ export async function generatePaintByNumbers(
     imgData = ctx.getImageData(0, 0, width, height) as unknown as ImageData;
   }
 
-  // ----- Pre-pass: contrast / saturation (portrait mode) -----
-  preprocessPixels(
-    imgData.data as unknown as Uint8ClampedArray,
-    options.contrastBoost ?? 1,
-    options.saturationBoost ?? 1,
-  );
+  // ----- Pre-pass (portrait mode): sharpen + edge contours + tone ----
+  {
+    const px = imgData.data as unknown as Uint8ClampedArray;
+    const edge = options.edgeEmphasis ?? 0;
+    if (edge > 0) {
+      sharpen(px, imgData.width, imgData.height, 0.7 * edge);
+      darkenEdges(px, imgData.width, imgData.height, 0.85 * edge);
+    }
+    preprocessPixels(px, options.contrastBoost ?? 1, options.saturationBoost ?? 1);
+  }
 
   // ----- k-means ---------------------------------------------
   const kCanvas = nodeCanvas.createCanvas(imgData.width, imgData.height);

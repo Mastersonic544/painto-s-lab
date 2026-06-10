@@ -105,14 +105,17 @@ export async function runGenerationJob(
   const genOptions = {
     colorCount: piece.color_count,
     randomSeed: seed,
-    minFacetSize: opts.minFacetSize ?? (portrait ? 24 : 40),
-    maxFacets: opts.maxFacets ?? (portrait ? 3800 : 3000),
+    // Portrait keeps finer facets so the drawn feature contours survive.
+    minFacetSize: opts.minFacetSize ?? (portrait ? 16 : 40),
+    maxFacets: opts.maxFacets ?? (portrait ? 4500 : 3000),
     narrowPixelStripCleanupRuns: 1,
     resizeMaxWidth: resizeMaxEdge,
     resizeMaxHeight: resizeMaxEdge,
     clusteringColorSpace: (portrait ? 'lab' : 'rgb') as 'lab' | 'rgb',
-    contrastBoost: portrait ? 1.2 : 1,
-    saturationBoost: portrait ? 1.12 : 1,
+    contrastBoost: portrait ? 1.22 : 1,
+    saturationBoost: portrait ? 1.1 : 1,
+    // Sharpen + burn dark contours along eyes/nose/mouth so features read.
+    edgeEmphasis: portrait ? 1 : 0,
   };
 
   // The engine logs verbosely (per reallocated point, per border step). With
