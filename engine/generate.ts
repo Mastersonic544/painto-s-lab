@@ -207,6 +207,8 @@ function portraitLineArt(data: Uint8ClampedArray, w: number, h: number, strength
   }
   const hi = Math.max(40, 150 - 80 * strength);
   const edges = canny(lum, w, h, hi * 0.4, hi);
+  // One dilate → ~3px pencil lines. They stay continuous because portrait mode
+  // skips the engine's narrow-strip cleanup (which would erase them).
   dilateBin(edges, w, h);
   // Flatten colour for clean fills, then burn the contours pure black.
   boxBlur(data, w, h);

@@ -107,9 +107,11 @@ export async function runGenerationJob(
     randomSeed: seed,
     // Portrait: bigger min facet drops texture noise (keeps only the major
     // contours) and keeps the job fast on a modest box.
-    minFacetSize: opts.minFacetSize ?? (portrait ? 26 : 40),
+    minFacetSize: opts.minFacetSize ?? (portrait ? 20 : 40),
     maxFacets: opts.maxFacets ?? (portrait ? 3500 : 3000),
-    narrowPixelStripCleanupRuns: 1,
+    // Portrait keeps the thin contour lines: 0 = skip narrow-strip cleanup,
+    // which would otherwise erase them into dashes.
+    narrowPixelStripCleanupRuns: portrait ? 0 : 1,
     resizeMaxWidth: resizeMaxEdge,
     resizeMaxHeight: resizeMaxEdge,
     clusteringColorSpace: (portrait ? 'lab' : 'rgb') as 'lab' | 'rgb',
@@ -240,7 +242,7 @@ export async function markPieceError(
 /** Portrait line density, tunable live via CONVERTER_EDGE (0..1). */
 function portraitEdgeStrength(): number {
   const v = Number(process.env.CONVERTER_EDGE);
-  return Number.isFinite(v) && v > 0 && v <= 1 ? v : 0.6;
+  return Number.isFinite(v) && v > 0 && v <= 1 ? v : 0.45;
 }
 
 /** Stable per-piece seed so re-runs are byte-identical. */
