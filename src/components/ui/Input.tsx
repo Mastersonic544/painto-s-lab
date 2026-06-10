@@ -20,7 +20,7 @@ const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
   return (
     <div className="flex flex-col gap-2">
       {label && (
-        <label htmlFor={inputId} className="pl-label text-cream-200">
+        <label htmlFor={inputId} className="pl-label text-text-on-light">
           {label}
         </label>
       )}
@@ -61,7 +61,7 @@ const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
           id={`${inputId}-msg`}
           className={cn(
             'pl-label',
-            error ? 'text-terracotta-soft' : 'text-text-on-dark-muted',
+            error ? 'text-terracotta-deep' : 'text-text-on-light-muted',
           )}
         >
           {error ?? hint}

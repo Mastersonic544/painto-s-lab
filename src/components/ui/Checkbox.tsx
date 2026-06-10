@@ -52,8 +52,8 @@ const Checkbox = forwardRef<HTMLInputElement, CheckboxProps>(function Checkbox(
       </span>
       {label && (
         <span className="flex flex-col gap-1">
-          <span className="font-body text-base text-cream-100">{label}</span>
-          {hint && <span className="pl-label text-text-on-dark-muted">{hint}</span>}
+          <span className="font-body text-base text-text-on-light">{label}</span>
+          {hint && <span className="pl-label text-text-on-light-muted">{hint}</span>}
         </span>
       )}
     </label>

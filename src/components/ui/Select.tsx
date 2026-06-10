@@ -23,7 +23,7 @@ const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select(
   return (
     <div className="flex flex-col gap-2">
       {label && (
-        <label htmlFor={inputId} className="pl-label text-cream-200">
+        <label htmlFor={inputId} className="pl-label text-text-on-light">
           {label}
         </label>
       )}
@@ -67,7 +67,7 @@ const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select(
         </span>
       </div>
       {(hint || error) && (
-        <span className={cn('pl-label', error ? 'text-terracotta-soft' : 'text-text-on-dark-muted')}>
+        <span className={cn('pl-label', error ? 'text-terracotta-deep' : 'text-text-on-light-muted')}>
           {error ?? hint}
         </span>
       )}

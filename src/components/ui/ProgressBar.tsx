@@ -25,8 +25,8 @@ export default function ProgressBar({
     <div className={cn('flex flex-col gap-2', className)}>
       {label && (
         <div className="flex items-baseline justify-between">
-          <span className="pl-label text-cream-200">{label}</span>
-          <span className="font-mono text-sm text-cream-200">{Math.round(clamped)}%</span>
+          <span className="pl-label text-text-on-light">{label}</span>
+          <span className="font-mono text-sm text-text-on-light">{Math.round(clamped)}%</span>
         </div>
       )}
       <div
