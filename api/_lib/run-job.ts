@@ -86,21 +86,45 @@ export async function runGenerationJob(
   // keeping us inside the function timeout — larger images quickly
   // run past 60s. Larger inputs belong on the dedicated worker.
   const seed = derivePieceSeed(piece.id);
+  // render_mode may be undefined until the migration is applied → painting.
+  const portrait = (piece as { render_mode?: string }).render_mode === 'portrait';
+
   // Tuned so the job finishes within a modest backend's CPU/RAM. Without a
   // facet cap the engine produced 30k+ regions (unpaintable, and it pegged the
   // CPU / exhausted memory for 10+ minutes — Render then killed it mid-job).
-  // A paint-by-numbers kit wants hundreds of regions, so: smaller working
-  // resolution, hard facet cap, drop tiny specks, single narrow-strip pass.
-  const resizeMaxEdge = opts.resizeMaxEdge ?? 640;
-  const result = await generatePaintByNumbers(buf, {
+  // Portrait mode keeps small high-contrast features (eyes) alive: perceptual
+  // LAB clustering, a contrast/saturation pre-pass, smaller facets, higher cap.
+  const resizeMaxEdge = opts.resizeMaxEdge ?? (portrait ? 700 : 640);
+  const genOptions = {
     colorCount: piece.color_count,
     randomSeed: seed,
-    minFacetSize: opts.minFacetSize ?? 48,
-    maxFacets: opts.maxFacets ?? 3500,
+    minFacetSize: opts.minFacetSize ?? (portrait ? 12 : 48),
+    maxFacets: opts.maxFacets ?? (portrait ? 6000 : 3500),
     narrowPixelStripCleanupRuns: 1,
     resizeMaxWidth: resizeMaxEdge,
     resizeMaxHeight: resizeMaxEdge,
-  });
+    clusteringColorSpace: (portrait ? 'lab' : 'rgb') as 'lab' | 'rgb',
+    contrastBoost: portrait ? 1.18 : 1,
+    saturationBoost: portrait ? 1.12 : 1,
+  };
+
+  // The engine logs verbosely (per reallocated point, per border step). With
+  // stdout piped (e.g. Render) those synchronous writes dominate runtime, so
+  // silence non-error logs for the duration of the job.
+  const origLog = console.log;
+  const origWarn = console.warn;
+  const origInfo = console.info;
+  console.log = () => {};
+  console.warn = () => {};
+  console.info = () => {};
+  let result;
+  try {
+    result = await generatePaintByNumbers(buf, genOptions);
+  } finally {
+    console.log = origLog;
+    console.warn = origWarn;
+    console.info = origInfo;
+  }
 
   // 4. Upload SVGs. Storage paths shadow the piece id so they're
   // easy to clean up if the piece is deleted later.

@@ -195,6 +195,22 @@ export function clampCustomCount(n: number): number {
   return Math.max(2, Math.min(64, Math.round(n)));
 }
 
+// The intake color slider runs 4..32 — 3 fixed tiers were too coarse.
+export const MIN_COLORS = 4;
+export const MAX_COLORS = 32;
+
+export function clampColorCount(n: number): number {
+  if (!Number.isFinite(n)) return 16;
+  return Math.max(MIN_COLORS, Math.min(MAX_COLORS, Math.round(n)));
+}
+
+/** Map a chosen color count back to a tier label for the DB `complexity` field. */
+export function tierFromCount(n: number): Tier {
+  if (n <= 10) return 'simple';
+  if (n <= 20) return 'normal';
+  return 'complex';
+}
+
 // ----- helpers -----------------------------------------------
 
 function fileToImage(file: File): Promise<HTMLImageElement> {

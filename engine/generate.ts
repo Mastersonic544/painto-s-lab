@@ -14,7 +14,7 @@ import { FacetCreator } from './src/facetCreator';
 import { FacetLabelPlacer } from './src/facetLabelPlacer';
 import { FacetResult } from './src/facetmanagement';
 import { FacetReducer } from './src/facetReducer';
-import { Settings } from './src/settings';
+import { Settings, ClusteringColorSpace } from './src/settings';
 import type { RGB } from './src/common';
 
 export interface GenerateOptions {
@@ -38,6 +38,49 @@ export interface GenerateOptions {
   fontSize?: number;
   /** Override narrow-pixel cleanup loop count. Default 3 (engine default). */
   narrowPixelStripCleanupRuns?: number;
+  /** k-means color space. LAB separates skin tones / eyes better (portraits). */
+  clusteringColorSpace?: 'rgb' | 'hsl' | 'lab';
+  /** Contrast multiplier applied before clustering (1 = none, 1.25 = +25%). */
+  contrastBoost?: number;
+  /** Saturation multiplier applied before clustering (1 = none). */
+  saturationBoost?: number;
+}
+
+const COLOR_SPACE: Record<'rgb' | 'hsl' | 'lab', ClusteringColorSpace> = {
+  rgb: ClusteringColorSpace.RGB,
+  hsl: ClusteringColorSpace.HSL,
+  lab: ClusteringColorSpace.LAB,
+};
+
+// Contrast + saturation pre-pass (in place). Portraits get a boost so eyes
+// and other small high-contrast features survive clustering instead of being
+// averaged into the surrounding skin tone.
+function preprocessPixels(data: Uint8ClampedArray, contrast: number, saturation: number): void {
+  const c = contrast;
+  const s = saturation;
+  if (c === 1 && s === 1) return;
+  for (let i = 0; i < data.length; i += 4) {
+    let r = data[i];
+    let g = data[i + 1];
+    let b = data[i + 2];
+    if (c !== 1) {
+      r = (r / 255 - 0.5) * c + 0.5;
+      g = (g / 255 - 0.5) * c + 0.5;
+      b = (b / 255 - 0.5) * c + 0.5;
+      r *= 255;
+      g *= 255;
+      b *= 255;
+    }
+    if (s !== 1) {
+      const luma = 0.299 * r + 0.587 * g + 0.114 * b;
+      r = luma + (r - luma) * s;
+      g = luma + (g - luma) * s;
+      b = luma + (b - luma) * s;
+    }
+    data[i] = Math.max(0, Math.min(255, r));
+    data[i + 1] = Math.max(0, Math.min(255, g));
+    data[i + 2] = Math.max(0, Math.min(255, b));
+  }
 }
 
 export interface PaletteEntry {
@@ -86,6 +129,7 @@ export async function generatePaintByNumbers(
   if (typeof options.narrowPixelStripCleanupRuns === 'number') {
     settings.narrowPixelStripCleanupRuns = options.narrowPixelStripCleanupRuns;
   }
+  settings.kMeansClusteringColorSpace = COLOR_SPACE[options.clusteringColorSpace ?? 'rgb'];
 
   settings.resizeImageIfTooLarge = true;
   if (typeof options.resizeMaxWidth === 'number') settings.resizeImageWidth = options.resizeMaxWidth;
@@ -126,6 +170,13 @@ export async function generatePaintByNumbers(
     ctx = rctx;
     imgData = ctx.getImageData(0, 0, width, height) as unknown as ImageData;
   }
+
+  // ----- Pre-pass: contrast / saturation (portrait mode) -----
+  preprocessPixels(
+    imgData.data as unknown as Uint8ClampedArray,
+    options.contrastBoost ?? 1,
+    options.saturationBoost ?? 1,
+  );
 
   // ----- k-means ---------------------------------------------
   const kCanvas = nodeCanvas.createCanvas(imgData.width, imgData.height);

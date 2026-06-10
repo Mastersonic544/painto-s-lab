@@ -5,18 +5,19 @@ import Card, { CardEyebrow, CardHeader, CardTitle } from '../components/ui/Card'
 import Dropzone from '../components/ui/Dropzone';
 import ImageCropper from '../components/ui/ImageCropper';
 import Input from '../components/ui/Input';
-import Pill from '../components/ui/Pill';
 import Radio from '../components/ui/Radio';
 import Spinner from '../components/ui/Spinner';
 import { CropRect, FULL_CROP, cropImageFile, pxToCanvasCm } from '../lib/image';
 import {
   AlgorithmicScore,
   ComplexityDecision,
-  TIER_TO_COLOR_COUNT,
+  MAX_COLORS,
+  MIN_COLORS,
   Tier,
-  clampCustomCount,
+  clampColorCount,
   combineDecision,
   computeAlgorithmicScore,
+  tierFromCount,
 } from '../lib/complexity';
 import {
   createPieceAndQueue,
@@ -25,6 +26,7 @@ import {
 } from '../lib/pieces';
 
 type Mode = 'auto' | 'manual';
+type RenderMode = 'painting' | 'portrait';
 type Step = 'compose' | 'review' | 'submitting';
 
 const TIER_LABEL: Record<Tier, string> = {
@@ -49,8 +51,7 @@ export default function Intake() {
   const [composing, setComposing] = useState(false);
   // Object URL of the cropped image, shown on the review screen.
   const [reviewPreview, setReviewPreview] = useState<string | null>(null);
-  const [manualTier, setManualTier] = useState<Tier>('normal');
-  const [manualCustom, setManualCustom] = useState<number | null>(null);
+  const [renderMode, setRenderMode] = useState<RenderMode>('painting');
 
   // Review state
   const [step, setStep] = useState<Step>('compose');
@@ -58,8 +59,9 @@ export default function Intake() {
   const [algorithmic, setAlgorithmic] = useState<AlgorithmicScore | null>(null);
   const [decision, setDecision] = useState<ComplexityDecision | null>(null);
   const [modelLoading, setModelLoading] = useState(false);
-  const [overrideTier, setOverrideTier] = useState<Tier | null>(null);
-  const [overrideCount, setOverrideCount] = useState<number | null>(null);
+  // Color count chosen on the slider (4..32) and the AI/algorithmic suggestion.
+  const [colorCount, setColorCount] = useState<number>(16);
+  const [recommendedCount, setRecommendedCount] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const previewUrl = useMemo(() => (file ? URL.createObjectURL(file) : null), [file]);
@@ -138,16 +140,17 @@ export default function Intake() {
         setModelLoading(false);
         const combined = combineDecision(algo, model, modelErr);
         setDecision(combined);
-        setOverrideTier(combined.finalTier);
-        setOverrideCount(combined.finalCount);
+        // The model suggests a granular count; fall back to the tier count.
+        const rec = clampColorCount(model?.suggestedCount ?? combined.finalCount);
+        setRecommendedCount(rec);
+        setColorCount(rec);
       } else {
-        // Manual: skip the model call, but still show algorithmic info.
+        // Manual: skip the model call, but still show the algorithmic suggestion.
         const combined = combineDecision(algo, null, null);
         setDecision(combined);
-        const tier = manualTier;
-        const count = manualCustom ?? TIER_TO_COLOR_COUNT[tier];
-        setOverrideTier(tier);
-        setOverrideCount(count);
+        const rec = clampColorCount(combined.finalCount);
+        setRecommendedCount(rec);
+        setColorCount(rec);
       }
     } catch (err) {
       setComposing(false);
@@ -155,31 +158,21 @@ export default function Intake() {
     }
   }
 
-  function setTier(tier: Tier) {
-    setOverrideTier(tier);
-    // Reset count to tier default whenever the tier changes, but only if
-    // the operator hasn't typed a custom override since.
-    setOverrideCount(TIER_TO_COLOR_COUNT[tier]);
-  }
-
-  function setCount(raw: number) {
-    setOverrideCount(clampCustomCount(raw));
-  }
-
   async function onGenerate() {
-    if (!sourceImageId || !overrideTier || overrideCount == null || !file) return;
+    if (!sourceImageId || !file) return;
     setStep('submitting');
     setError(null);
     try {
       const { pieceId } = await createPieceAndQueue({
         sourceImageId,
         title: title || file.name,
-        colorCount: overrideCount,
+        colorCount,
         canvasWidthCm: canvasW,
         canvasHeightCm: canvasH,
         coats,
         mode,
-        complexity: overrideTier,
+        complexity: tierFromCount(colorCount),
+        renderMode,
       });
       navigate(`/app/piece/${pieceId}`);
     } catch (err) {
@@ -274,55 +267,48 @@ export default function Intake() {
 
             <Card>
               <CardHeader>
-                <CardEyebrow>4 · Mode</CardEyebrow>
-                <CardTitle>Auto or Manual?</CardTitle>
+                <CardEyebrow>4 · Style</CardEyebrow>
+                <CardTitle>Painting or portrait?</CardTitle>
+              </CardHeader>
+              <div className="flex flex-col gap-3">
+                <Radio
+                  name="renderMode"
+                  label="Painting"
+                  hint="The classic look. Best for landscapes, objects, most art."
+                  checked={renderMode === 'painting'}
+                  onChange={() => setRenderMode('painting')}
+                />
+                <Radio
+                  name="renderMode"
+                  label="Portrait / faces"
+                  hint="Tuned for faces so eyes and features keep detail instead of flattening into one color."
+                  checked={renderMode === 'portrait'}
+                  onChange={() => setRenderMode('portrait')}
+                />
+              </div>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardEyebrow>5 · Colors</CardEyebrow>
+                <CardTitle>Auto or manual?</CardTitle>
               </CardHeader>
               <div className="flex flex-col gap-3">
                 <Radio
                   name="mode"
-                  label="Auto: the lab recommends a tier"
-                  hint="Vision model + algorithmic check. You confirm before generation."
+                  label="Auto: AI recommends a color count"
+                  hint="Vision model + algorithmic check. You confirm on a slider before generating."
                   checked={mode === 'auto'}
                   onChange={() => setMode('auto')}
                 />
                 <Radio
                   name="mode"
-                  label="Manual: I'll set it"
-                  hint="Pick a tier or a custom color count."
+                  label="Manual: I'll set the colors"
+                  hint="Skip the AI and pick the count yourself (4–32) on the next screen."
                   checked={mode === 'manual'}
                   onChange={() => setMode('manual')}
                 />
               </div>
-              {mode === 'manual' && (
-                <div className="mt-4 flex flex-col gap-3">
-                  <div className="flex flex-wrap gap-2">
-                    {(['simple', 'normal', 'complex'] as Tier[]).map((t) => (
-                      <Pill
-                        key={t}
-                        active={manualTier === t && manualCustom === null}
-                        onClick={() => {
-                          setManualTier(t);
-                          setManualCustom(null);
-                        }}
-                      >
-                        {TIER_LABEL[t]}
-                      </Pill>
-                    ))}
-                  </div>
-                  <Input
-                    label="Custom count (override)"
-                    type="number"
-                    min={2}
-                    max={64}
-                    value={manualCustom ?? ''}
-                    onChange={(e) => {
-                      const v = Number(e.target.value);
-                      setManualCustom(Number.isFinite(v) && v > 0 ? clampCustomCount(v) : null);
-                    }}
-                    hint="Lands between tiers? Round up, never down."
-                  />
-                </div>
-              )}
             </Card>
 
             {error && <ErrorBox message={error} />}
@@ -349,7 +335,9 @@ export default function Intake() {
               />
             )}
             <div className="pl-label text-text-on-light-muted mt-3">
-              {canvasW}×{canvasH} cm · {coats} coats · {mode === 'auto' ? 'Auto' : 'Manual'}
+              {canvasW}×{canvasH} cm · {coats} coats ·{' '}
+              {renderMode === 'portrait' ? 'Portrait' : 'Painting'} ·{' '}
+              {mode === 'auto' ? 'Auto' : 'Manual'}
             </div>
             <button
               type="button"
@@ -371,26 +359,42 @@ export default function Intake() {
             <Card>
               <CardHeader>
                 <CardEyebrow>Confirm or override</CardEyebrow>
-                <CardTitle>Color count for this piece</CardTitle>
+                <CardTitle>Colors for this piece</CardTitle>
               </CardHeader>
-              <div className="flex flex-wrap gap-2">
-                {(['simple', 'normal', 'complex'] as Tier[]).map((t) => (
-                  <Pill key={t} active={overrideTier === t} onClick={() => setTier(t)}>
-                    {TIER_LABEL[t]}
-                  </Pill>
-                ))}
+              <div className="flex items-baseline gap-3">
+                <span className="font-display font-black text-display-sm text-text-on-light">
+                  {colorCount}
+                </span>
+                <span className="pl-label text-text-on-light-muted">colors</span>
+                {recommendedCount != null && (
+                  <button
+                    type="button"
+                    onClick={() => setColorCount(recommendedCount)}
+                    className="pl-label text-mustard-deep hover:underline ml-auto"
+                  >
+                    AI suggests {recommendedCount}
+                    {colorCount !== recommendedCount ? ' · reset' : ''}
+                  </button>
+                )}
               </div>
-              <div className="mt-4">
-                <Input
-                  label="Color count"
-                  type="number"
-                  min={2}
-                  max={64}
-                  value={overrideCount ?? ''}
-                  onChange={(e) => setCount(Number(e.target.value))}
-                  hint="A manual number overrides the tier. Round up, never down."
-                />
+              <input
+                type="range"
+                min={MIN_COLORS}
+                max={MAX_COLORS}
+                value={colorCount}
+                onChange={(e) => setColorCount(clampColorCount(Number(e.target.value)))}
+                className="w-full mt-3 accent-mustard"
+                aria-label="Color count"
+              />
+              <div className="flex justify-between pl-label text-text-on-light-muted mt-1">
+                <span>{MIN_COLORS} · simple</span>
+                <span>{MAX_COLORS} · detailed</span>
               </div>
+              <p className="pl-label text-text-on-light-muted mt-2">
+                {renderMode === 'portrait'
+                  ? 'Portrait mode · more colors help faces keep detail'
+                  : 'Painting mode'}
+              </p>
 
               {error && (
                 <div className="mt-3">
@@ -403,7 +407,7 @@ export default function Intake() {
                   size="lg"
                   onClick={onGenerate}
                   loading={step === 'submitting'}
-                  disabled={!overrideCount || !sourceImageId}
+                  disabled={!sourceImageId}
                 >
                   Send to the converter
                 </Button>

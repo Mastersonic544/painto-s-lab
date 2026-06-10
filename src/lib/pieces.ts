@@ -49,26 +49,34 @@ export interface CreatePieceArgs {
   mode: 'auto' | 'manual';
   /** Tier label even when the operator overrode the count. */
   complexity: Tier;
+  /** Conversion algorithm: 'painting' (default) or 'portrait'. */
+  renderMode: 'painting' | 'portrait';
 }
 
 /** Phase 2: insert pieces row with the chosen settings and fire /api/generate. */
 export async function createPieceAndQueue(args: CreatePieceArgs): Promise<{ pieceId: string }> {
-  const { data: piece, error } = await supabase
+  const baseRow = {
+    source_image_id: args.sourceImageId,
+    title: args.title,
+    status: 'queued' as const,
+    mode: args.mode,
+    complexity: args.complexity,
+    color_count: args.colorCount,
+    canvas_width_cm: args.canvasWidthCm,
+    canvas_height_cm: args.canvasHeightCm,
+    coats: args.coats,
+  };
+  let res = await supabase
     .from('pieces')
-    .insert({
-      source_image_id: args.sourceImageId,
-      title: args.title,
-      status: 'queued',
-      mode: args.mode,
-      complexity: args.complexity,
-      color_count: args.colorCount,
-      canvas_width_cm: args.canvasWidthCm,
-      canvas_height_cm: args.canvasHeightCm,
-      coats: args.coats,
-    })
+    .insert({ ...baseRow, render_mode: args.renderMode })
     .select('id')
     .single();
-  if (error) throw error;
+  // Gracefully degrade if the render_mode migration hasn't been applied yet.
+  if (res.error && /render_mode/i.test(res.error.message)) {
+    res = await supabase.from('pieces').insert(baseRow).select('id').single();
+  }
+  if (res.error) throw res.error;
+  const piece = res.data;
 
   const session = await supabase.auth.getSession();
   const accessToken = session.data.session?.access_token;

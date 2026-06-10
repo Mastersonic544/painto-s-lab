@@ -8,6 +8,7 @@ export type UserRole = 'operator';
 export type PieceStatus = 'queued' | 'ready' | 'approved' | 'archived' | 'error';
 export type PieceMode = 'auto' | 'manual';
 export type PieceComplexity = 'simple' | 'normal' | 'complex';
+export type PieceRenderMode = 'painting' | 'portrait';
 export type CartStatus = 'open' | 'checked_out';
 export type MixTaskStatus = 'todo' | 'done';
 
@@ -84,6 +85,7 @@ export interface Database {
           status: PieceStatus;
           mode: PieceMode;
           complexity: PieceComplexity;
+          render_mode: PieceRenderMode;
           color_count: number;
           canvas_width_cm: number;
           canvas_height_cm: number;
@@ -102,6 +104,7 @@ export interface Database {
           status?: PieceStatus;
           mode?: PieceMode;
           complexity?: PieceComplexity;
+          render_mode?: PieceRenderMode;
           color_count: number;
           canvas_width_cm?: number;
           canvas_height_cm?: number;
