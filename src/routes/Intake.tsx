@@ -26,7 +26,7 @@ import {
 } from '../lib/pieces';
 
 type Mode = 'auto' | 'manual';
-type RenderMode = 'painting' | 'portrait';
+type RenderMode = 'painting' | 'portrait' | 'exact_source';
 type Step = 'compose' | 'review' | 'submitting';
 
 const TIER_LABEL: Record<Tier, string> = {
@@ -292,6 +292,13 @@ export default function Intake() {
                   checked={renderMode === 'portrait'}
                   onChange={() => setRenderMode('portrait')}
                 />
+                <Radio
+                  name="renderMode"
+                  label="Exact source"
+                  hint="Overlay numbers onto the original image. No color flattening, no segmentation cleanup."
+                  checked={renderMode === 'exact_source'}
+                  onChange={() => setRenderMode('exact_source')}
+                />
               </div>
             </Card>
 
@@ -343,7 +350,7 @@ export default function Intake() {
             )}
             <div className="pl-label text-text-on-light-muted mt-3">
               {canvasW}×{canvasH} cm · {coats} coats ·{' '}
-              {renderMode === 'portrait' ? 'Portrait' : 'Painting'} ·{' '}
+              {renderMode === 'portrait' ? 'Portrait' : renderMode === 'exact_source' ? 'Exact source' : 'Painting'} ·{' '}
               {mode === 'auto' ? 'Auto' : 'Manual'}
             </div>
             <button

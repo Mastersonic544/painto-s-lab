@@ -121,10 +121,11 @@ function ReviewArea(props: {
   const [mergeFrom, setMergeFrom] = useState<number | null>(null);
   const [selectedLabel, setSelectedLabel] = useState<number | null>(null);
   const [editCount, setEditCount] = useState(0);
-  const [saving, setSaving] = useState<'idle' | 'approve' | 'reject' | 'requeue'>('idle');
+  const [saving, setSaving] = useState<'idle' | 'approve' | 'reject' | 'requeue' | 'regenerate'>('idle');
   const [feedback, setFeedback] = useState<string | null>(null);
   const [requeueCount, setRequeueCount] = useState(props.paletteJson.length || 16);
-
+  const [strokeWidth, setStrokeWidth] = useState(1.0);
+  const [reloadKey, setReloadKey] = useState(0);
   // Load SVGs from storage on mount (fresh signed URLs).
   useEffect(() => {
     let cancelled = false;
@@ -149,7 +150,7 @@ function ReviewArea(props: {
     return () => {
       cancelled = true;
     };
-  }, [props.previewPath, props.outlinePath]);
+  }, [props.previewPath, props.outlinePath, reloadKey]);
 
   // After the slider mounts both SVGs, label `<g>`s get tagged with the
   // matching data-facetId so nudge/merge edits can target them.
@@ -348,6 +349,43 @@ function ReviewArea(props: {
     }
     setSaving('idle');
     await supabase.from('piece_colors').delete().eq('piece_id', props.pieceId);
+  }
+
+  // Regenerate files: send strokeWidth to /api/regenerate to rebuild SVGs
+  // from cache, avoiding a full k-means recalculation.
+  async function regenerateFiles() {
+    setSaving('regenerate');
+    setFeedback(null);
+    const sw = Math.max(0.1, Math.min(10, strokeWidth));
+    try {
+      const session = await supabase.auth.getSession();
+      const token = session.data.session?.access_token;
+      if (!token) throw new Error('Missing session token');
+
+      const resp = await fetch('/api/regenerate', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ pieceId: props.pieceId, strokeWidth: sw }),
+      });
+      const data = await resp.json();
+      if (!resp.ok) {
+        throw new Error(data.error ?? `Server error: ${resp.status}`);
+      }
+
+      if (data.queued) {
+        setFeedback('Cache missing on older piece. Falling back to full background generation, please wait...');
+      } else {
+        setReloadKey((k) => k + 1);
+        setFeedback('Files successfully regenerated with new stroke width.');
+      }
+    } catch (err) {
+      setFeedback(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSaving('idle');
+    }
   }
 
   const aspect = useMemo(() => {
@@ -580,6 +618,40 @@ function ReviewArea(props: {
             SVGs are vector and reflect your edits. The code sheet opens a print
             dialog — choose "Save as PDF".
           </p>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardEyebrow>Rendering</CardEyebrow>
+            <CardTitle>Outline controls</CardTitle>
+          </CardHeader>
+          <div className="flex flex-col gap-3">
+            <label className="flex flex-col gap-1">
+              <span className="pl-label text-text-on-light-muted">
+                Stroke width: {strokeWidth.toFixed(1)}px
+              </span>
+              <input
+                type="range"
+                min="0.1"
+                max="5"
+                step="0.1"
+                value={strokeWidth}
+                onChange={(e) => setStrokeWidth(Number(e.target.value))}
+                className="accent-swamp-600"
+              />
+            </label>
+            <Button
+              variant="secondary"
+              onClick={regenerateFiles}
+              loading={saving === 'regenerate'}
+            >
+              Regenerate files
+            </Button>
+            <p className="pl-label text-text-on-light-muted">
+              Locks in the current stroke width. Re-runs the engine with this
+              exact value.
+            </p>
+          </div>
         </Card>
 
         <Card>

@@ -86,12 +86,19 @@ export async function runGenerationJob(
   // keeping us inside the function timeout — larger images quickly
   // run past 60s. Larger inputs belong on the dedicated worker.
   const seed = derivePieceSeed(piece.id);
-  // render_mode may be undefined until the migration is applied → painting.
-  const portrait = (piece as { render_mode?: string }).render_mode === 'portrait';
+  // render_mode may be undefined until the migration is applied -> painting.
+  const renderMode = ((piece as { render_mode?: string }).render_mode ?? 'painting') as string;
+  const portrait = renderMode === 'portrait';
+  const exactSource = renderMode === 'exact_source';
+  let strokeWidth = ((piece as { stroke_width?: number }).stroke_width ?? 1.0) as number;
+  if (strokeWidth === 1.0) {
+    const canvasSizeCm = Math.max(piece.canvas_width_cm, piece.canvas_height_cm);
+    strokeWidth = Math.max(0.5, Math.min(2.0, (canvasSizeCm / 40) * 1.0));
+  }
 
   // Tuned so the job finishes within a modest backend's CPU/RAM. Without a
   // facet cap the engine produced 30k+ regions (unpaintable, and it pegged the
-  // CPU / exhausted memory for 10+ minutes — Render then killed it mid-job).
+  // CPU / exhausted memory for 10+ minutes -- Render then killed it mid-job).
   // Portrait mode keeps small high-contrast features (eyes) alive: perceptual
   // LAB clustering, a contrast/saturation pre-pass, smaller facets, higher cap.
   // Working resolution is THE speed/memory lever (not the canvas DPI). Lower
@@ -101,16 +108,20 @@ export async function runGenerationJob(
   // Env override for quick tuning without a redeploy: CONVERTER_MAX_EDGE.
   const envEdge = Number(process.env.CONVERTER_MAX_EDGE);
   const resizeMaxEdge =
-    opts.resizeMaxEdge ?? (Number.isFinite(envEdge) && envEdge > 0 ? envEdge : portrait ? 512 : 512);
+    opts.resizeMaxEdge ?? (Number.isFinite(envEdge) && envEdge > 0 ? envEdge : 512);
   const genOptions = {
     colorCount: piece.color_count,
     randomSeed: seed,
-    // Portrait: bigger min facet drops texture noise (keeps only the major
-    // contours) and keeps the job fast on a modest box.
-    minFacetSize: opts.minFacetSize ?? (portrait ? 24 : 40),
+    renderMode,
+    strokeWidth,
+    fontSize: 12,
+    // Exact source skips chunk pruning and cleanup inside the engine.
+    // If undefined, the engine calculates the minFacetSize dynamically based on the font size.
+    minFacetSize: exactSource ? undefined : opts.minFacetSize,
     maxFacets: opts.maxFacets ?? (portrait ? 3500 : 3000),
     // Portrait keeps the thin contour lines: 0 = skip narrow-strip cleanup,
     // which would otherwise erase them into dashes.
+    // exact_source mode handles this inside the engine (forces 0).
     narrowPixelStripCleanupRuns: portrait ? 0 : 1,
     resizeMaxWidth: resizeMaxEdge,
     resizeMaxHeight: resizeMaxEdge,
@@ -120,6 +131,9 @@ export async function runGenerationJob(
     // Portrait line-art: Canny contours burned black + flattened fills. Tune
     // line density live with CONVERTER_EDGE (0..1, higher = more lines).
     edgeEmphasis: portrait ? portraitEdgeStrength() : 0,
+    // Exact source: unified font sizing is off so labels render at the fixed
+    // base fontSize (the engine already handles this via its default).
+    unifiedFontSize: exactSource ? false : true,
   };
 
   // The engine logs verbosely (per reallocated point, per border step). With
@@ -144,6 +158,8 @@ export async function runGenerationJob(
   // easy to clean up if the piece is deleted later.
   const previewPath = `${piece.id}/filled.svg`;
   const outlinePath = `${piece.id}/outline.svg`;
+  const cachePath = `${piece.id}/segmentation_cache.json`;
+
   const upPreview = await admin.storage
     .from(PREVIEW_BUCKET)
     .upload(previewPath, result.filledSvg, {
@@ -151,6 +167,14 @@ export async function runGenerationJob(
       upsert: true,
     });
   if (upPreview.error) throw new Error(`Upload preview: ${upPreview.error.message}`);
+
+  const upCache = await admin.storage
+    .from(PREVIEW_BUCKET)
+    .upload(cachePath, JSON.stringify(result.segmentationCache), {
+      contentType: 'application/json',
+      upsert: true,
+    });
+  if (upCache.error) throw new Error(`Upload cache: ${upCache.error.message}`);
 
   const upOutline = await admin.storage
     .from(OUTLINE_BUCKET)

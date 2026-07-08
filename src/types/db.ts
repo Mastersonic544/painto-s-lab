@@ -8,7 +8,7 @@ export type UserRole = 'operator';
 export type PieceStatus = 'queued' | 'ready' | 'approved' | 'archived' | 'error';
 export type PieceMode = 'auto' | 'manual';
 export type PieceComplexity = 'simple' | 'normal' | 'complex';
-export type PieceRenderMode = 'painting' | 'portrait';
+export type PieceRenderMode = 'painting' | 'portrait' | 'exact_source';
 export type CartStatus = 'open' | 'checked_out';
 export type MixTaskStatus = 'todo' | 'done';
 
@@ -96,6 +96,7 @@ export interface Database {
           created_at: Timestamp;
           approved_at: Timestamp | null;
           error_message: string | null;
+          stroke_width: number;
         };
         Insert: {
           id?: UUID;
@@ -115,6 +116,7 @@ export interface Database {
           created_at?: Timestamp;
           approved_at?: Timestamp | null;
           error_message?: string | null;
+          stroke_width?: number;
         };
         Update: Partial<Database['public']['Tables']['pieces']['Insert']>;
         Relationships: [];

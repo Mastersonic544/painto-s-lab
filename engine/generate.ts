@@ -50,6 +50,9 @@ export interface GenerateOptions {
    * facet engine draws crisp feature outlines instead of smudging them.
    */
   edgeEmphasis?: number;
+  renderMode?: string;
+  strokeWidth?: number;
+  unifiedFontSize?: boolean;
 }
 
 // ----- Portrait line-art pre-pass -------------------------------------------
@@ -292,6 +295,35 @@ export interface GenerateResult {
   /** Post-resize dimensions of the processed bitmap. */
   width: number;
   height: number;
+  segmentationCache?: unknown;
+}
+
+export function calculateMinFacetSize(fontSizeInImageSpace: number, paddingPct: number = 0.05): number {
+  const paddingFactor = 1 - 2 * paddingPct; // 0.90 for 5% margin
+  const textWidth = 1.2 * fontSizeInImageSpace; // 2-digit width estimate
+  const textHeight = fontSizeInImageSpace;
+  const area = (textWidth / paddingFactor) * (textHeight / paddingFactor);
+  return Math.ceil(area);
+}
+
+export function getMinFacetSizeForPiece(
+  renderMode: string | undefined,
+  fontSize: number,
+  sizeMultiplier: number,
+  overrideMinFacetSize?: number,
+): number {
+  if (renderMode === 'exact_source') {
+    return 1; // Bypass small chunk pruning in exact source mode
+  }
+  if (overrideMinFacetSize !== undefined) {
+    return overrideMinFacetSize;
+  }
+  const fontSizeInImageSpace = fontSize / sizeMultiplier;
+  const baseArea = calculateMinFacetSize(fontSizeInImageSpace, 0.05);
+  // Apply a shape safety factor (1.5 for portrait, 2.5 for standard painting)
+  // to ensure irregular curved facets are large enough to paint/contain text.
+  const multiplier = renderMode === 'portrait' ? 1.5 : 2.5;
+  return Math.ceil(baseArea * multiplier);
 }
 
 export async function generatePaintByNumbers(
@@ -311,16 +343,28 @@ export async function generatePaintByNumbers(
   // passing 0 still gets deterministic output instead of a silent surprise.
   settings.randomSeed = options.randomSeed === 0 ? 1 : options.randomSeed;
 
-  if (typeof options.minFacetSize === 'number') {
-    settings.removeFacetsSmallerThanNrOfPoints = options.minFacetSize;
-  }
+  const sizeMultiplier = options.sizeMultiplier ?? 3;
+  const fontSize = options.fontSize ?? 12;
+  const renderMode = options.renderMode ?? 'painting';
+
+  const finalMinFacetSize = getMinFacetSizeForPiece(
+    renderMode,
+    fontSize,
+    sizeMultiplier,
+    options.minFacetSize,
+  );
+  settings.removeFacetsSmallerThanNrOfPoints = finalMinFacetSize;
+
   if (typeof options.maxFacets === 'number') {
     settings.maximumNumberOfFacets = options.maxFacets;
   }
   if (options.colorRestrictions) {
     settings.kMeansColorRestrictions = options.colorRestrictions;
   }
-  if (typeof options.narrowPixelStripCleanupRuns === 'number') {
+
+  if (renderMode === 'exact_source') {
+    settings.narrowPixelStripCleanupRuns = 0;
+  } else if (typeof options.narrowPixelStripCleanupRuns === 'number') {
     settings.narrowPixelStripCleanupRuns = options.narrowPixelStripCleanupRuns;
   }
   settings.kMeansClusteringColorSpace = COLOR_SPACE[options.clusteringColorSpace ?? 'rgb'];
@@ -366,7 +410,7 @@ export async function generatePaintByNumbers(
   }
 
   // ----- Pre-pass (portrait mode): sharpen + edge contours + tone ----
-  {
+  if (renderMode !== 'exact_source') {
     const px = imgData.data as unknown as Uint8ClampedArray;
     const edge = options.edgeEmphasis ?? 0;
     if (edge > 0) {
@@ -438,20 +482,28 @@ export async function generatePaintByNumbers(
   await FacetLabelPlacer.buildFacetLabelBounds(facetResult, () => undefined);
 
   // ----- Render the two output profiles ---------------------
-  const sizeMultiplier = options.sizeMultiplier ?? 3;
-  const fontSize = options.fontSize ?? 50;
   const fontColor = options.fontColor ?? '#1A1A1A';
+  const strokeWidth = options.strokeWidth ?? 1.0;
+  const unifiedFontSize = options.unifiedFontSize ?? (renderMode !== 'exact_source');
+
+  let base64Data: string | undefined;
+  if (renderMode === 'exact_source') {
+    base64Data = c.toBuffer('image/png').toString('base64');
+  }
 
   // Profile 1: filled SVG (the finished-piece preview).
   const filledSvg = renderSvg(
     facetResult,
     colormapResult.colorsByIndex,
     sizeMultiplier,
-    /* fill */ true,
-    /* stroke */ false,
-    /* labels */ false,
+    /* fill */ renderMode === 'exact_source' ? false : true,
+    /* stroke */ renderMode === 'exact_source' ? true : false,
+    /* labels */ renderMode === 'exact_source' ? true : false,
     fontSize,
     fontColor,
+    strokeWidth,
+    unifiedFontSize,
+    base64Data,
   );
   // Profile 2: outline + numbers (the printable template).
   const outlineSvg = renderSvg(
@@ -463,6 +515,9 @@ export async function generatePaintByNumbers(
     /* labels */ true,
     fontSize,
     fontColor,
+    strokeWidth,
+    unifiedFontSize,
+    undefined,
   );
 
   // ----- Palette JSON (one entry per color index) ------------
@@ -479,19 +534,52 @@ export async function generatePaintByNumbers(
     frequency: freq[idx],
   }));
 
+  const serializedFacets = facetResult.facets
+    .filter(f => f !== null)
+    .map(f => {
+      const path = f.getFullPathFromBorderSegments(false);
+      if (
+        path.length > 0 &&
+        (path[0].x !== path[path.length - 1].x ||
+         path[0].y !== path[path.length - 1].y)
+      ) {
+        path.push(path[0]);
+      }
+      return {
+        id: f.id,
+        color: f.color,
+        path: path.map(p => ({ x: p.x, y: p.y })),
+        labelBounds: {
+          minX: f.labelBounds.minX,
+          minY: f.labelBounds.minY,
+          width: f.labelBounds.width,
+          height: f.labelBounds.height,
+        }
+      };
+    });
+
+  const segmentationCache = {
+    width: imgData.width,
+    height: imgData.height,
+    colorsByIndex: colormapResult.colorsByIndex,
+    facets: serializedFacets
+  };
+
   return {
     filledSvg,
     outlineSvg,
     palette,
     width: imgData.width,
     height: imgData.height,
+    segmentationCache,
   };
 }
+
 
 // Direct port of src-cli/main.ts:createSVG. Two profiles share this; flags
 // flip fills/strokes/labels.
 function renderSvg(
-  facetResult: FacetResult,
+  facetResult: FacetResult | { width: number; height: number; facets: unknown[] },
   colorsByIndex: RGB[],
   sizeMultiplier: number,
   fill: boolean,
@@ -499,6 +587,9 @@ function renderSvg(
   addLabels: boolean,
   fontSize: number,
   fontColor: string,
+  strokeWidth: number = 1.0,
+  unifiedFontSize: boolean = true,
+  backgroundImageBase64?: string,
 ): string {
   const xmlns = 'http://www.w3.org/2000/svg';
   const svgWidth = sizeMultiplier * facetResult.width;
@@ -508,15 +599,25 @@ function renderSvg(
   // full-resolution drawing.
   let svg = `<?xml version="1.0" standalone="no"?>\n<svg width="${svgWidth}" height="${svgHeight}" viewBox="0 0 ${svgWidth} ${svgHeight}" xmlns="${xmlns}">`;
 
-  for (const f of facetResult.facets) {
-    if (f == null || f.borderSegments.length === 0) continue;
+  if (backgroundImageBase64) {
+    svg += `\n<image href="data:image/png;base64,${backgroundImageBase64}" x="0" y="0" width="${svgWidth}" height="${svgHeight}" opacity="1.0" style="pointer-events: none;" />`;
+  }
 
-    const path = f.getFullPathFromBorderSegments(false);
-    if (
-      path[0].x !== path[path.length - 1].x ||
-      path[0].y !== path[path.length - 1].y
-    ) {
-      path.push(path[0]);
+  for (const f of facetResult.facets) {
+    if (f == null) continue;
+    if (!('path' in f) && f.borderSegments.length === 0) continue;
+
+    let path: Array<{ x: number; y: number }>;
+    if ('path' in f) {
+      path = f.path;
+    } else {
+      path = f.getFullPathFromBorderSegments(false);
+      if (
+        path[0].x !== path[path.length - 1].x ||
+        path[0].y !== path[path.length - 1].y
+      ) {
+        path.push(path[0]);
+      }
     }
 
     let d = `M ${path[0].x * sizeMultiplier} ${path[0].y * sizeMultiplier} `;
@@ -536,7 +637,7 @@ function renderSvg(
     const strokeStr = stroke ? '#000' : fill ? rgbStr : '';
 
     let style = `fill: ${fillStr};`;
-    if (strokeStr) style += ` stroke: ${strokeStr}; stroke-width:1px`;
+    if (strokeStr) style += ` stroke: ${strokeStr}; stroke-width:${strokeWidth}px`;
 
     svg += `<path data-facetId="${f.id}" d="${d}" style="${style}"></path>`;
 
@@ -546,11 +647,26 @@ function renderSvg(
       const lw = f.labelBounds.width * sizeMultiplier;
       const lh = f.labelBounds.height * sizeMultiplier;
       const digits = String(f.color).length;
+      
+      let computedFontSize = fontSize;
+      if (unifiedFontSize) {
+        // Enforce padding constraint (5% margin from borders: text must fit in 90% of box size)
+        const maxWidth = (lw * 0.9) / (digits * 0.6);
+        const maxHeight = lh * 0.9;
+        computedFontSize = Math.min(fontSize, maxWidth, maxHeight);
+        computedFontSize = Math.max(1, computedFontSize);
+      } else {
+        computedFontSize = fontSize / digits;
+      }
+
+      // Center coords inside the bounds
+      const cx = ox + lw / 2;
+      const cy = oy + lh / 2;
+
       svg +=
-        `<g class="label" transform="translate(${ox},${oy})">` +
-        `<svg width="${lw}" height="${lh}" overflow="visible" viewBox="-50 -50 100 100" preserveAspectRatio="xMidYMid meet">` +
-        `<text font-family="Tahoma" font-size="${fontSize / digits}" dominant-baseline="middle" text-anchor="middle" fill="${fontColor}">${f.color}</text>` +
-        `</svg></g>`;
+        `<g class="label" data-facetId="${f.id}" data-color-index="${f.color}" transform="translate(${cx},${cy})">` +
+        `<text x="0" y="0" font-family="Tahoma" font-size="${computedFontSize}" dominant-baseline="middle" text-anchor="middle" fill="${fontColor}">${f.color}</text>` +
+        `</g>`;
     }
   }
 

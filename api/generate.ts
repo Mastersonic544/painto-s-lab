@@ -109,7 +109,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // is always set, so this path never runs on Vercel.
   try {
     const runJobModule = ['.', '_lib', 'run-job'].join('/');
-    const { runGenerationJob } = (await import(runJobModule)) as typeof import('./_lib/run-job');
+    const { runGenerationJob } = (await import(/* @vite-ignore */ runJobModule)) as typeof import('./_lib/run-job');
     const result = await runGenerationJob(admin, pieceId);
     return res.status(200).json({ ok: true, ...result });
   } catch (err) {

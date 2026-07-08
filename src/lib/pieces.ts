@@ -49,8 +49,8 @@ export interface CreatePieceArgs {
   mode: 'auto' | 'manual';
   /** Tier label even when the operator overrode the count. */
   complexity: Tier;
-  /** Conversion algorithm: 'painting' (default) or 'portrait'. */
-  renderMode: 'painting' | 'portrait';
+  /** Conversion algorithm: 'painting', 'portrait' or 'exact_source'. */
+  renderMode: 'painting' | 'portrait' | 'exact_source';
 }
 
 /** Phase 2: insert pieces row with the chosen settings and fire /api/generate. */
