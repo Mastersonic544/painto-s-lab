@@ -32,13 +32,14 @@ app.post('/generate', (req, res) => {
     return res.status(401).json({ error: 'bad or missing converter secret' });
   }
   const pieceId = String((req.body as { pieceId?: unknown })?.pieceId ?? '').trim();
-  if (!pieceId) return res.status(400).json({ error: 'pieceId required' });
+  const uid = String((req.body as { uid?: unknown })?.uid ?? '').trim();
+  if (!pieceId || !uid) return res.status(400).json({ error: 'pieceId and uid required' });
 
   // Resolve the admin client up front so a misconfiguration is a clean 500
   // rather than an unhandled rejection after we've already acked.
   let admin: ReturnType<typeof getAdmin>;
   try {
-    admin = getAdmin();
+    admin = getAdmin(uid);
   } catch (err) {
     return res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
   }

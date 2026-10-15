@@ -14,10 +14,10 @@
 // worker — engine/run-job.ts is wired to be that worker as-is.
 // =============================================================
 
-import { SupabaseClient } from '@supabase/supabase-js';
+import type { getAdmin } from './admin';
 import { generatePaintByNumbers } from '../../engine/generate';
 import { estimateVolumeMl } from '../../src/lib/paintMath';
-import type { Database, PaletteJson } from '../../src/types/db';
+import type { PaletteJson } from '../../src/types/db';
 
 const SOURCE_BUCKET = 'source-images';
 const PREVIEW_BUCKET = 'piece-previews';
@@ -47,7 +47,7 @@ export interface RunJobResult {
  * translate that into a piece row update with status='error'.
  */
 export async function runGenerationJob(
-  admin: SupabaseClient<Database>,
+  admin: ReturnType<typeof getAdmin>,
   pieceId: string,
   opts: RunJobOptions = {},
 ): Promise<RunJobResult> {
@@ -226,8 +226,8 @@ export async function runGenerationJob(
     .from('pieces')
     .update({
       status: 'ready',
-      preview_svg_path: previewPath,
-      outline_svg_path: outlinePath,
+      preview_svg_path: upPreview.data!.path,
+      outline_svg_path: upOutline.data!.path,
       palette_json: paletteJson,
       error_message: null,
     })
@@ -236,8 +236,8 @@ export async function runGenerationJob(
 
   return {
     pieceId: piece.id,
-    previewPath,
-    outlinePath,
+    previewPath: upPreview.data!.path,
+    outlinePath: upOutline.data!.path,
     paletteSize: result.palette.length,
     durationMs: Date.now() - startedAt,
   };
@@ -248,7 +248,7 @@ export async function runGenerationJob(
  * from inside the failure path.
  */
 export async function markPieceError(
-  admin: SupabaseClient<Database>,
+  admin: ReturnType<typeof getAdmin>,
   pieceId: string,
   message: string,
 ): Promise<void> {

@@ -27,7 +27,7 @@ export async function uploadSourceImage(file: File): Promise<UploadedSource> {
   const { data: source, error: srcErr } = await supabase
     .from('source_images')
     .insert({
-      storage_path: storagePath,
+      storage_path: upload.data?.path ?? storagePath,
       original_filename: file.name,
       uploaded_by: user.id,
     })
@@ -35,7 +35,7 @@ export async function uploadSourceImage(file: File): Promise<UploadedSource> {
     .single();
   if (srcErr) throw srcErr;
 
-  return { sourceImageId: source.id, storagePath, uploaderId: user.id };
+  return { sourceImageId: source.id, storagePath: upload.data?.path ?? storagePath, uploaderId: user.id };
 }
 
 export interface CreatePieceArgs {

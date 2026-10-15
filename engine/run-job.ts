@@ -11,24 +11,13 @@
 //     forever. This is the shape of the worker PRD §5 suggests
 //     moving to once serverless timeouts become a regular problem.
 //
-// Reads SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY from process.env.
+// Reads Firebase service account settings and FIREBASE_USER_ID from process.env.
 // =============================================================
 
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { getAdmin } from '../api/_lib/admin';
 import { runGenerationJob, markPieceError } from '../api/_lib/run-job';
-import type { Database } from '../src/types/db';
 
-function getAdmin(): SupabaseClient<Database> {
-  const url = process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url) throw new Error('SUPABASE_URL is not set');
-  if (!key) throw new Error('SUPABASE_SERVICE_ROLE_KEY is not set');
-  return createClient<Database>(url, key, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
-}
-
-async function processOne(admin: SupabaseClient<Database>, pieceId: string) {
+async function processOne(admin: ReturnType<typeof getAdmin>, pieceId: string) {
   console.log(`[worker] processing ${pieceId}`);
   try {
     const out = await runGenerationJob(admin, pieceId, {
@@ -44,7 +33,7 @@ async function processOne(admin: SupabaseClient<Database>, pieceId: string) {
   }
 }
 
-async function poll(admin: SupabaseClient<Database>, intervalMs = 3000) {
+async function poll(admin: ReturnType<typeof getAdmin>, intervalMs = 3000) {
   console.log(`[worker] polling every ${intervalMs}ms for queued pieces...`);
   while (true) {
     const { data, error } = await admin
@@ -65,7 +54,9 @@ async function poll(admin: SupabaseClient<Database>, intervalMs = 3000) {
 
 async function main() {
   const args = process.argv.slice(2);
-  const admin = getAdmin();
+  const uid = process.env.FIREBASE_USER_ID;
+  if (!uid) throw new Error('FIREBASE_USER_ID is required for the CLI worker');
+  const admin = getAdmin(uid);
   if (args.includes('--poll')) {
     await poll(admin);
     return;

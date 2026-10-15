@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { getAdmin } from './_lib/admin';
+import { getAdmin, verifyToken } from './_lib/admin';
 import { renderSvgCached } from './_lib/regenerate-renderer';
 
 export const config = {
@@ -30,16 +30,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!token) return res.status(401).json({ error: 'Missing bearer token' });
 
   let admin: ReturnType<typeof getAdmin>;
+  let uid: string;
   try {
-    admin = getAdmin();
+    uid = await verifyToken(token);
+    admin = getAdmin(uid);
   } catch (err) {
-    return res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+    return res.status(401).json({ error: err instanceof Error ? err.message : 'Invalid session' });
   }
-
-  // const { data: who, error: whoErr } = await admin.auth.getUser(token);
-  // if (whoErr || !who?.user) {
-  //   return res.status(401).json({ error: 'Invalid session' });
-  // }
 
   try {
     // 1. Fetch piece configuration
@@ -63,7 +60,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .eq('id', pieceId);
       if (updErr) {
         if (updErr.message.includes('stroke_width')) {
-          return res.status(400).json({ error: "Database column 'stroke_width' is missing. Please run the SQL migration in your Supabase Dashboard." });
+          return res.status(400).json({ error: "Invalid stroke width setting." });
         }
         throw new Error(`Update piece fallback: ${updErr.message}`);
       }
@@ -81,13 +78,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               'content-type': 'application/json',
               'x-converter-secret': process.env.CONVERTER_SECRET ?? '',
             },
-            body: JSON.stringify({ pieceId }),
+            body: JSON.stringify({ pieceId, uid }),
             signal: typeof AbortSignal.timeout === 'function' ? AbortSignal.timeout(55_000) : undefined,
           }).catch(() => undefined);
         } else {
           const runJobModule = ['.', '_lib', 'run-job'].join('/');
           const { runGenerationJob } = await import(/* @vite-ignore */ runJobModule) as typeof import('./_lib/run-job');
-          runGenerationJob(admin, pieceId).catch((err: any) => {
+          runGenerationJob(admin, pieceId).catch((err: unknown) => {
             console.error(`[regenerate-fallback] inline job failed:`, err);
             admin.from('pieces').update({ status: 'error', error_message: String(err) }).eq('id', pieceId);
           });
@@ -110,7 +107,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .eq('id', pieceId);
     if (updErr) {
       if (updErr.message.includes('stroke_width')) {
-        return res.status(400).json({ error: "Database column 'stroke_width' is missing. Please run the SQL migration in your Supabase Dashboard." });
+        return res.status(400).json({ error: "Invalid stroke width setting." });
       }
       throw new Error(`Update stroke width: ${updErr.message}`);
     }
@@ -171,8 +168,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     );
 
     // 6. Upload rebuilt SVGs
-    const previewPath = piece.preview_svg_path ?? `${piece.id}/filled.svg`;
-    const outlinePath = piece.outline_svg_path ?? `${piece.id}/outline.svg`;
+    const previewPath = `${piece.id}/filled.svg`;
+    const outlinePath = `${piece.id}/outline.svg`;
 
     const upPreview = await admin.storage
       .from('piece-previews')
@@ -189,6 +186,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         upsert: true,
       });
     if (upOutline.error) throw new Error(`Upload outline: ${upOutline.error.message}`);
+
+    const saved = await admin.from('pieces').update({
+      preview_svg_path: upPreview.data!.path,
+      outline_svg_path: upOutline.data!.path,
+    }).eq('id', pieceId);
+    if (saved.error) throw new Error(`Save regenerated media: ${saved.error.message}`);
 
     return res.status(200).json({ ok: true, strokeWidth });
   } catch (err) {

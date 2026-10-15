@@ -247,6 +247,8 @@ export async function saveEditedPiece(args: SaveEditedArgs): Promise<void> {
     .from('pieces')
     .update({
       palette_json: args.paletteJson,
+      preview_svg_path: upPreview.data!.path,
+      outline_svg_path: upOutline.data!.path,
       status: 'approved',
       approved_at: new Date().toISOString(),
     })

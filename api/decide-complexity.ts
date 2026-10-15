@@ -7,18 +7,8 @@
 // the algorithmic fallback covers them.
 // =============================================================
 
-import { createClient } from '@supabase/supabase-js';
+import { getAdmin, verifyToken } from './_lib/admin';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-
-// Inlined (not imported from ./_lib/admin): Vercel's function bundler wasn't
-// including the shared _lib helper, which crashed the function on import.
-function getAdmin() {
-  const url = process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url) throw new Error('SUPABASE_URL (or VITE_SUPABASE_URL) is not set');
-  if (!key) throw new Error('SUPABASE_SERVICE_ROLE_KEY is not set');
-  return createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
-}
 
 export const config = {
   // Vision round-trip can be slow on the free model; the algorithmic fallback
@@ -43,12 +33,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Verify the caller with the service-role client — no anon key needed.
   let admin: ReturnType<typeof getAdmin>;
   try {
-    admin = getAdmin();
+    admin = getAdmin(await verifyToken(token));
   } catch (err) {
-    return res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+    return res.status(401).json({ error: err instanceof Error ? err.message : 'Invalid session' });
   }
-  const { data: who, error: whoErr } = await admin.auth.getUser(token);
-  if (whoErr || !who?.user) return res.status(401).json({ error: 'Invalid session' });
 
   const openrouterKey = process.env.OPENROUTER_API_KEY;
   if (!openrouterKey) {

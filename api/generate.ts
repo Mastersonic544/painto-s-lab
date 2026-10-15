@@ -7,18 +7,8 @@
 // process" when serverless time limits start to bite).
 // =============================================================
 
-import { createClient } from '@supabase/supabase-js';
+import { getAdmin, verifyToken } from './_lib/admin';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-
-// Inlined (not imported from ./_lib/admin): Vercel's function bundler wasn't
-// including the shared _lib helper, which crashed the function on import.
-function getAdmin() {
-  const url = process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url) throw new Error('SUPABASE_URL (or VITE_SUPABASE_URL) is not set');
-  if (!key) throw new Error('SUPABASE_SERVICE_ROLE_KEY is not set');
-  return createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
-}
 
 export const config = {
   // Forwards to the Render converter, which acks fast once awake — but the
@@ -60,18 +50,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
   if (!token) return res.status(401).json({ error: 'Missing bearer token' });
 
-  // Verify the caller with the service-role client — no anon key needed, so
-  // the function only depends on SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY.
+  // Verify the Firebase ID token before opening this user's database data.
   let admin: ReturnType<typeof getAdmin>;
+  let uid: string;
   try {
-    admin = getAdmin();
+    uid = await verifyToken(token);
+    admin = getAdmin(uid);
   } catch (err) {
-    return res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+    return res.status(401).json({ error: err instanceof Error ? err.message : 'Invalid session' });
   }
-  const { data: who, error: whoErr } = await admin.auth.getUser(token);
-  if (whoErr || !who?.user) {
-    return res.status(401).json({ error: 'Invalid session' });
-  }
+
+  const piece = await admin.from('pieces').select('id').eq('id', pieceId).maybeSingle();
+  if (piece.error || !piece.data) return res.status(404).json({ error: 'Piece not found' });
 
   // Production path: hand the heavy job to the long-running converter
   // (Render) so it never hits the serverless timeout. The frontend tracks
@@ -85,7 +75,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           'content-type': 'application/json',
           'x-converter-secret': process.env.CONVERTER_SECRET ?? '',
         },
-        body: JSON.stringify({ pieceId }),
+        body: JSON.stringify({ pieceId, uid }),
         // Long enough to wake a sleeping free-tier Render instance.
         signal: AbortSignal.timeout(55_000),
       });

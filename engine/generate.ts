@@ -578,8 +578,15 @@ export async function generatePaintByNumbers(
 
 // Direct port of src-cli/main.ts:createSVG. Two profiles share this; flags
 // flip fills/strokes/labels.
+interface SerializedFacet {
+  id: number;
+  color: number;
+  path: Array<{ x: number; y: number }>;
+  labelBounds: { minX: number; minY: number; width: number; height: number };
+}
+
 function renderSvg(
-  facetResult: FacetResult | { width: number; height: number; facets: unknown[] },
+  facetResult: FacetResult | { width: number; height: number; facets: SerializedFacet[] },
   colorsByIndex: RGB[],
   sizeMultiplier: number,
   fill: boolean,

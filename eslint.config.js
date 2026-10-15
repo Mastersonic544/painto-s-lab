@@ -5,7 +5,7 @@ import reactRefresh from 'eslint-plugin-react-refresh';
 import prettier from 'eslint-config-prettier';
 
 export default tseslint.config(
-  { ignores: ['dist', 'design-reference', 'node_modules'] },
+  { ignores: ['dist', 'design-reference', 'node_modules', 'engine/src', 'engine/src-cli'] },
   {
     extends: [js.configs.recommended, ...tseslint.configs.recommended, prettier],
     files: ['**/*.{ts,tsx}'],
@@ -18,5 +18,9 @@ export default tseslint.config(
       ...reactHooks.configs.recommended.rules,
       'react-refresh/only-export-components': ['warn', { allowConstantExport: true }],
     },
+  },
+  {
+    files: ['src/lib/supabase.ts', 'api/_lib/admin.ts'],
+    rules: { '@typescript-eslint/no-explicit-any': 'off' },
   },
 );
