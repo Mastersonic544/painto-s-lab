@@ -57,10 +57,11 @@ export function devApi(): Plugin {
         const url = req.url ?? '';
         if (!url.startsWith('/api/')) return next();
 
-        // /api/foo?x=1 -> api/foo.ts. Ignore shared helpers in api/_lib.
+        // /api/foo?x=1 -> a source route or standalone api/foo.ts.
         const name = url.replace(/^\/api\//, '').split('?')[0].replace(/\/$/, '');
         if (!name || name.startsWith('_')) return next();
-        const file = resolve(server.config.root, 'api', `${name}.ts`);
+        const sourceRoute = resolve(server.config.root, 'server', 'routes', `${name}.ts`);
+        const file = existsSync(sourceRoute) ? sourceRoute : resolve(server.config.root, 'api', `${name}.ts`);
         if (!existsSync(file)) return next();
 
         try {
@@ -71,7 +72,8 @@ export function devApi(): Plugin {
             : undefined;
           (req as Connect.IncomingMessage & { query?: unknown }).query = {};
 
-          const mod = await server.ssrLoadModule(`/api/${name}.ts`);
+          const modulePath = file === sourceRoute ? `/server/routes/${name}.ts` : `/api/${name}.ts`;
+          const mod = await server.ssrLoadModule(modulePath);
           const handler = mod.default as (rq: unknown, rs: unknown) => unknown;
           if (typeof handler !== 'function') return next();
 

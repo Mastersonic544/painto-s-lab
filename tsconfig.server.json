@@ -8,5 +8,5 @@
     "noEmit": true,
     "types": ["node"]
   },
-  "include": ["api/**/*.ts", "engine/run-job.ts", "engine/server.ts"]
+  "include": ["api/**/*.ts", "server/routes/**/*.ts", "engine/run-job.ts", "engine/server.ts"]
 }

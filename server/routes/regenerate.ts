@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { getAdmin, verifyToken } from './_lib/admin';
-import { renderSvgCached } from './_lib/regenerate-renderer';
-import { runGenerationJob, markPieceError } from './_lib/run-job';
+import { getAdmin, verifyToken } from '../../api/_lib/admin';
+import { renderSvgCached } from '../../api/_lib/regenerate-renderer';
+import { runGenerationJob, markPieceError } from '../../api/_lib/run-job';
 
 export const config = {
   maxDuration: 300,

@@ -7,7 +7,7 @@
 // the algorithmic fallback covers them.
 // =============================================================
 
-import { getAdmin, verifyToken } from './_lib/admin';
+import { getAdmin, verifyToken } from '../../api/_lib/admin';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
 export const config = {

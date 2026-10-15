@@ -1,5 +1,5 @@
-import { getAdmin, verifyToken } from './_lib/admin';
-import { runGenerationJob, markPieceError } from './_lib/run-job';
+import { getAdmin, verifyToken } from '../../api/_lib/admin';
+import { runGenerationJob, markPieceError } from '../../api/_lib/run-job';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
 // Generation runs on Vercel so Painto does not depend on a separate converter host.
