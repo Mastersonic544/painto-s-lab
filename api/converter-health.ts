@@ -6,10 +6,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     const canvas = await import('canvas');
     const image = canvas.createCanvas(1, 1);
-    stage = 'firebase-admin';
-    await import('./_lib/admin');
-    stage = 'generation-engine';
-    await import('./_lib/run-job');
+    stage = 'bundled-generation';
+    await import('./generate.js');
     return res.status(200).json({ ok: true, width: image.width });
   } catch (error) {
     return res.status(500).json({ ok: false, stage, error: error instanceof Error ? error.message : String(error) });
