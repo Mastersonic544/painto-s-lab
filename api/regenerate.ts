@@ -1,9 +1,10 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { getAdmin, verifyToken } from './_lib/admin';
 import { renderSvgCached } from './_lib/regenerate-renderer';
+import { runGenerationJob, markPieceError } from './_lib/run-job';
 
 export const config = {
-  maxDuration: 60,
+  maxDuration: 300,
 };
 
 function safeParse(s: string): Record<string, unknown> | null {
@@ -68,33 +69,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // 2. Clear previous colors
       await admin.from('piece_colors').delete().eq('piece_id', pieceId);
 
-      // 3. Trigger generate endpoint (either forward to Render or run inline)
-      const converterUrl = process.env.CONVERTER_URL;
+      // 3. Rebuild the missing cache and SVGs in this request.
       try {
-        if (converterUrl) {
-          await fetch(`${converterUrl.replace(/\/$/, '')}/generate`, {
-            method: 'POST',
-            headers: {
-              'content-type': 'application/json',
-              'x-converter-secret': process.env.CONVERTER_SECRET ?? '',
-            },
-            body: JSON.stringify({ pieceId, uid }),
-            signal: typeof AbortSignal.timeout === 'function' ? AbortSignal.timeout(55_000) : undefined,
-          }).catch(() => undefined);
-        } else {
-          const runJobModule = ['.', '_lib', 'run-job'].join('/');
-          const { runGenerationJob } = await import(/* @vite-ignore */ runJobModule) as typeof import('./_lib/run-job');
-          runGenerationJob(admin, pieceId).catch((err: unknown) => {
-            console.error(`[regenerate-fallback] inline job failed:`, err);
-            admin.from('pieces').update({ status: 'error', error_message: String(err) }).eq('id', pieceId);
-          });
-        }
+        await runGenerationJob(admin, pieceId);
       } catch (triggerErr) {
         console.error(`[regenerate-fallback] Failed to trigger job:`, triggerErr);
-        await admin.from('pieces').update({ status: 'error', error_message: `Failed to trigger background job: ${String(triggerErr)}` }).eq('id', pieceId);
+        await markPieceError(admin, pieceId, String(triggerErr));
+        throw triggerErr;
       }
-
-      return res.status(200).json({ ok: true, queued: true });
+      return res.status(200).json({ ok: true, queued: false });
     }
 
     const cacheText = await dlCache.data.text();

@@ -423,8 +423,11 @@ export default function Intake() {
                   loading={step === 'submitting'}
                   disabled={!sourceImageId}
                 >
-                  Send to the converter
+                  {step === 'submitting' ? 'Generating your piece…' : 'Generate piece'}
                 </Button>
+                {step === 'submitting' && (
+                  <p className="text-text-on-light text-sm self-center">This can take a minute or two. Keep this tab open.</p>
+                )}
                 <Link to="/app">
                   <Button variant="ghost" size="lg">
                     Cancel

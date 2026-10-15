@@ -1,105 +1,38 @@
-// =============================================================
-// Painto's Lab — /api/generate
-// Vercel serverless trigger for the conversion engine. The actual
-// work lives in api/_lib/run-job.ts so the same code path can run
-// from engine/run-job.ts as a dedicated long-running worker
-// (PRD §5: "move the worker to a dedicated queue and long-running
-// process" when serverless time limits start to bite).
-// =============================================================
-
 import { getAdmin, verifyToken } from './_lib/admin';
+import { runGenerationJob, markPieceError } from './_lib/run-job';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
-export const config = {
-  // Forwards to the Render converter, which acks fast once awake — but the
-  // free tier cold-starts (~30-50s). Allow up to 60s so the forward survives a
-  // cold start and the job actually reaches Render. (Render acks 202 then runs
-  // in the background, so this only waits for the wake-up, not the conversion.)
-  maxDuration: 60,
-};
+// Generation runs on Vercel so Painto does not depend on a separate converter host.
+export const config = { maxDuration: 300 };
 
-// Lightweight failure write — kept here (not imported from run-job) so this
-// function never pulls the engine/native canvas into its bundle/cold start.
-async function markPieceError(
-  admin: ReturnType<typeof getAdmin>,
-  pieceId: string,
-  message: string,
-): Promise<void> {
-  try {
-    await admin
-      .from('pieces')
-      .update({ status: 'error', error_message: message.slice(0, 1000) })
-      .eq('id', pieceId);
-  } catch {
-    // best-effort
-  }
+function safeParse(s: string): Record<string, unknown> | null {
+  try { return JSON.parse(s) as Record<string, unknown>; }
+  catch { return null; }
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
-
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   const body = (typeof req.body === 'string' ? safeParse(req.body) : req.body) ?? {};
   const pieceId = String(body.pieceId ?? '').trim();
   if (!pieceId) return res.status(400).json({ error: 'pieceId required' });
 
-  // Authenticate the caller. We use the service-role client to do
-  // the actual work, but we want to refuse anonymous invocations.
   const authHeader = req.headers.authorization ?? '';
   const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
   if (!token) return res.status(401).json({ error: 'Missing bearer token' });
 
-  // Verify the Firebase ID token before opening this user's database data.
   let admin: ReturnType<typeof getAdmin>;
-  let uid: string;
   try {
-    uid = await verifyToken(token);
+    const uid = await verifyToken(token);
     admin = getAdmin(uid);
   } catch (err) {
     return res.status(401).json({ error: err instanceof Error ? err.message : 'Invalid session' });
   }
 
   const piece = await admin.from('pieces').select('id').eq('id', pieceId).maybeSingle();
-  if (piece.error || !piece.data) return res.status(404).json({ error: 'Piece not found' });
+  if (piece.error) return res.status(500).json({ error: piece.error.message });
+  if (!piece.data) return res.status(404).json({ error: 'Piece not found' });
 
-  // Production path: hand the heavy job to the long-running converter
-  // (Render) so it never hits the serverless timeout. The frontend tracks
-  // the piece via Realtime/poll, so we just need the worker to accept it.
-  const converterUrl = process.env.CONVERTER_URL;
-  if (converterUrl) {
-    try {
-      const resp = await fetch(`${converterUrl.replace(/\/$/, '')}/generate`, {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          'x-converter-secret': process.env.CONVERTER_SECRET ?? '',
-        },
-        body: JSON.stringify({ pieceId, uid }),
-        // Long enough to wake a sleeping free-tier Render instance.
-        signal: AbortSignal.timeout(55_000),
-      });
-      if (!resp.ok) {
-        const text = await resp.text().catch(() => '');
-        throw new Error(`converter ${resp.status}: ${text.slice(0, 200)}`);
-      }
-      return res.status(202).json({ ok: true, forwarded: true });
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      console.error(`[generate] forward to converter failed for ${pieceId}:`, message);
-      await markPieceError(admin, pieceId, message);
-      return res.status(502).json({ ok: false, error: message });
-    }
-  }
-
-  // Local / no external converter: run inline (works via the Vite dev bridge).
-  // The specifier is built from a variable so Vercel's bundler can't trace it
-  // — the engine + native `canvas` are never pulled into this function's
-  // bundle (they live only on the Render converter). In production CONVERTER_URL
-  // is always set, so this path never runs on Vercel.
   try {
-    const runJobModule = ['.', '_lib', 'run-job'].join('/');
-    const { runGenerationJob } = (await import(/* @vite-ignore */ runJobModule)) as typeof import('./_lib/run-job');
     const result = await runGenerationJob(admin, pieceId);
     return res.status(200).json({ ok: true, ...result });
   } catch (err) {
@@ -107,13 +40,5 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     console.error(`[generate] piece ${pieceId} failed:`, err);
     await markPieceError(admin, pieceId, message);
     return res.status(500).json({ ok: false, error: message });
-  }
-}
-
-function safeParse(s: string): Record<string, unknown> | null {
-  try {
-    return JSON.parse(s) as Record<string, unknown>;
-  } catch {
-    return null;
   }
 }

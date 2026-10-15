@@ -6,9 +6,7 @@ import ComparisonSlider, {
   ComparisonSliderHandle,
 } from '../components/ui/ComparisonSlider';
 import Input from '../components/ui/Input';
-import LiquidContainer from '../components/ui/LiquidContainer';
 import Pill from '../components/ui/Pill';
-import ProgressBar from '../components/ui/ProgressBar';
 import Spinner from '../components/ui/Spinner';
 import { usePieceStatus } from '../hooks/usePieceStatus';
 import { estimateVolumeMl } from '../lib/paintMath';
@@ -334,21 +332,27 @@ function ReviewArea(props: {
       setFeedback(error.message);
       return;
     }
-    // Kick the converter again.
-    const session = await supabase.auth.getSession();
-    const token = session.data.session?.access_token;
-    if (token) {
-      await fetch('/api/generate', {
+    try {
+      const session = await supabase.auth.getSession();
+      const token = session.data.session?.access_token;
+      if (!token) throw new Error('Missing session token');
+      const response = await fetch('/api/generate', {
         method: 'POST',
         headers: {
           'content-type': 'application/json',
           authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({ pieceId: props.pieceId }),
-      }).catch(() => undefined);
+      });
+      const result = await response.json().catch(() => ({})) as { error?: string };
+      if (!response.ok) throw new Error(result.error ?? `Generation failed (HTTP ${response.status}).`);
+      setFeedback('New version ready.');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      await supabase.from('pieces').update({ status: 'error', error_message: message }).eq('id', props.pieceId);
+      setFeedback(message);
     }
     setSaving('idle');
-    await supabase.from('piece_colors').delete().eq('piece_id', props.pieceId);
   }
 
   // Regenerate files: send strokeWidth to /api/regenerate to rebuild SVGs
@@ -774,21 +778,19 @@ function ColorPicker({
 }
 
 function ProgressPanel() {
-  const [pct, setPct] = useState(8);
+  const [seconds, setSeconds] = useState(0);
   useEffect(() => {
-    const id = setInterval(() => {
-      setPct((p) => (p < 92 ? p + Math.max(0.5, (92 - p) * 0.04) : p));
-    }, 600);
+    const id = setInterval(() => setSeconds((s) => s + 1), 1000);
     return () => clearInterval(id);
   }, []);
   return (
     <Card>
       <div className="flex items-center gap-6">
-        <LiquidContainer label="brewing" color="var(--teal)" fillPct={pct} width={120} />
+        <Spinner size="lg" />
         <div className="flex-1 flex flex-col gap-3">
-          <CardEyebrow>Brewing in the lab</CardEyebrow>
-          <CardTitle>k-means, facets, borders, labels…</CardTitle>
-          <ProgressBar value={pct} tone="teal" label="Converter" />
+          <CardEyebrow>Generating</CardEyebrow>
+          <CardTitle>Building colors, borders, and labels…</CardTitle>
+          <p className="text-text-on-light">Elapsed: {Math.floor(seconds / 60)}m {seconds % 60}s. This usually takes a minute or two.</p>
         </div>
       </div>
     </Card>

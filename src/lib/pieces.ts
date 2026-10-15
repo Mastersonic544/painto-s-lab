@@ -82,17 +82,22 @@ export async function createPieceAndQueue(args: CreatePieceArgs): Promise<{ piec
   const accessToken = session.data.session?.access_token;
   if (!accessToken) throw new Error('No access token to invoke /api/generate.');
 
-  // Fire-and-forget; the UI subscribes via Realtime.
-  void fetch('/api/generate', {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      authorization: `Bearer ${accessToken}`,
-    },
-    body: JSON.stringify({ pieceId: piece.id }),
-  }).catch((err) => {
-    console.warn('[createPieceAndQueue] /api/generate fetch failed:', err);
-  });
+  try {
+    const response = await fetch('/api/generate', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({ pieceId: piece.id }),
+    });
+    const result = await response.json().catch(() => ({})) as { error?: string };
+    if (!response.ok) throw new Error(result.error ?? `Generation failed (HTTP ${response.status}).`);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    await supabase.from('pieces').update({ status: 'error', error_message: message }).eq('id', piece.id);
+    throw error;
+  }
 
   return { pieceId: piece.id };
 }
