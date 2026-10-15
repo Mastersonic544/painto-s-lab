@@ -4,7 +4,7 @@ Painto's Lab uses Firebase Authentication and Realtime Database for accounts and
 
 ## Local setup
 
-Use Node.js 22, run `npm install`, copy `.env.example` to `.env.local`, and set the Firebase web app values, including `VITE_FIREBASE_DATABASE_URL`. Enable Email/Password sign in, create a user, create Realtime Database, and publish `database.rules.json`. Painto records and JSON artifacts live under `apps/paintos/users/{uid}`. The rules also permit Punchiora's `users/{uid}` namespace so both apps can share one Firebase project.
+Use Node.js 22, run `npm install`, copy `.env.example` to `.env.local`, and set the Firebase web app values, including `VITE_FIREBASE_DATABASE_URL`. Enable Email/Password sign in, create a user, create Realtime Database, and publish `database.rules.json`. Painto records and JSON artifacts live under `apps/paintos/users/{uid}`. The rules also permit Punchiora's separate `apps/punchiora/users/{uid}` namespace in the shared Firebase project.
 
 Set `VITE_CLOUDINARY_CLOUD_NAME` and `VITE_CLOUDINARY_UPLOAD_PRESET` for the browser and Vercel functions. The unsigned preset must allow PNG, JPG, and SVG uploads. Source images and generated SVGs go to Cloudinary; segmentation cache JSON goes to Realtime Database.
 
@@ -18,4 +18,4 @@ Deploy the `painto-s-lab` directory as its own Vercel project. Set the `VITE_FIR
 
 `OPENROUTER_API_KEY` is optional for model-based complexity estimates. The app has an algorithmic fallback.
 
-The first Firebase project starts empty. The old Supabase database, storage objects, and users are not automatically copied. Create Firebase Auth users separately and migrate old data if it must be preserved.
+The old Painto Supabase records and storage files were migrated in October 2026. `scripts/migrate-backup.mjs` contains the resumable import process; Firebase Auth users were created separately.
