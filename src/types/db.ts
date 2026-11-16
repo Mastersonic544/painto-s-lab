@@ -96,6 +96,7 @@ export interface Database {
           created_at: Timestamp;
           approved_at: Timestamp | null;
           error_message: string | null;
+          studio_settings?: { detail: number; brightness: number; contrast: number; saturation: number };
           stroke_width: number;
         };
         Insert: {
@@ -116,6 +117,7 @@ export interface Database {
           created_at?: Timestamp;
           approved_at?: Timestamp | null;
           error_message?: string | null;
+          studio_settings?: { detail: number; brightness: number; contrast: number; saturation: number };
           stroke_width?: number;
         };
         Update: Partial<Database['public']['Tables']['pieces']['Insert']>;

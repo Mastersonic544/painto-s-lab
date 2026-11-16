@@ -24,6 +24,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const pieceId = String(body.pieceId ?? '').trim();
   const strokeWidth = Number(body.strokeWidth ?? 1.0);
   if (!pieceId) return res.status(400).json({ error: 'pieceId required' });
+  if (!Number.isFinite(strokeWidth) || strokeWidth < 0.1 || strokeWidth > 5)
+    return res.status(400).json({ error: 'Stroke width must be between 0.1 and 5.' });
 
   // Authenticate the caller using a bearer token
   const authHeader = req.headers.authorization ?? '';
@@ -57,11 +59,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // 1. Update stroke_width and status to 'queued' in DB
       const { error: updErr } = await admin
         .from('pieces')
-        .update({ stroke_width: strokeWidth, status: 'queued', error_message: null } as Record<string, unknown>)
+        .update({ stroke_width: strokeWidth, status: 'queued', error_message: null } as Record<
+          string,
+          unknown
+        >)
         .eq('id', pieceId);
       if (updErr) {
         if (updErr.message.includes('stroke_width')) {
-          return res.status(400).json({ error: "Invalid stroke width setting." });
+          return res.status(400).json({ error: 'Invalid stroke width setting.' });
         }
         throw new Error(`Update piece fallback: ${updErr.message}`);
       }
@@ -90,7 +95,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .eq('id', pieceId);
     if (updErr) {
       if (updErr.message.includes('stroke_width')) {
-        return res.status(400).json({ error: "Invalid stroke width setting." });
+        return res.status(400).json({ error: 'Invalid stroke width setting.' });
       }
       throw new Error(`Update stroke width: ${updErr.message}`);
     }
@@ -98,7 +103,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // 4. Download background image if exact_source mode
     const renderMode = piece.render_mode ?? 'painting';
     const sizeMultiplier = piece.size_multiplier ?? 3;
-    const fontSize = piece.font_size ?? 12;
+    const fontSize = piece.font_size ?? 18;
     const fontColor = piece.font_color ?? '#1A1A1A';
 
     let backgroundImageBase64: string | undefined;
@@ -134,7 +139,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       fontColor,
       strokeWidth,
       unifiedFontSize,
-      backgroundImageBase64
+      backgroundImageBase64,
     );
 
     const outlineSvg = renderSvgCached(
@@ -147,33 +152,32 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       fontColor,
       strokeWidth,
       unifiedFontSize,
-      undefined
+      undefined,
     );
 
     // 6. Upload rebuilt SVGs
     const previewPath = `${piece.id}/filled.svg`;
     const outlinePath = `${piece.id}/outline.svg`;
 
-    const upPreview = await admin.storage
-      .from('piece-previews')
-      .upload(previewPath, filledSvg, {
-        contentType: 'image/svg+xml',
-        upsert: true,
-      });
+    const upPreview = await admin.storage.from('piece-previews').upload(previewPath, filledSvg, {
+      contentType: 'image/svg+xml',
+      upsert: true,
+    });
     if (upPreview.error) throw new Error(`Upload preview: ${upPreview.error.message}`);
 
-    const upOutline = await admin.storage
-      .from('piece-outlines')
-      .upload(outlinePath, outlineSvg, {
-        contentType: 'image/svg+xml',
-        upsert: true,
-      });
+    const upOutline = await admin.storage.from('piece-outlines').upload(outlinePath, outlineSvg, {
+      contentType: 'image/svg+xml',
+      upsert: true,
+    });
     if (upOutline.error) throw new Error(`Upload outline: ${upOutline.error.message}`);
 
-    const saved = await admin.from('pieces').update({
-      preview_svg_path: upPreview.data!.path,
-      outline_svg_path: upOutline.data!.path,
-    }).eq('id', pieceId);
+    const saved = await admin
+      .from('pieces')
+      .update({
+        preview_svg_path: upPreview.data!.path,
+        outline_svg_path: upOutline.data!.path,
+      })
+      .eq('id', pieceId);
     if (saved.error) throw new Error(`Save regenerated media: ${saved.error.message}`);
 
     return res.status(200).json({ ok: true, strokeWidth });

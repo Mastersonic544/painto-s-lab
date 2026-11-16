@@ -32,7 +32,7 @@ export function renderSvgCached(
   fontSize: number,
   fontColor: string,
   strokeWidth: number = 1.0,
-  unifiedFontSize: boolean = true,
+  _unifiedFontSize: boolean = true,
   backgroundImageBase64?: string,
 ): string {
   const xmlns = 'http://www.w3.org/2000/svg';
@@ -44,6 +44,7 @@ export function renderSvgCached(
     svg += `\n<image href="data:image/png;base64,${backgroundImageBase64}" x="0" y="0" width="${svgWidth}" height="${svgHeight}" opacity="1.0" style="pointer-events: none;" />`;
   }
 
+  let labels = '';
   for (const f of segmentation.facets) {
     if (f == null || !f.path || f.path.length === 0) continue;
 
@@ -63,39 +64,29 @@ export function renderSvgCached(
     const strokeStr = stroke ? '#000' : fill ? rgbStr : '';
 
     let style = `fill: ${fillStr};`;
-    if (strokeStr) style += ` stroke: ${strokeStr}; stroke-width:${strokeWidth}px`;
+    if (strokeStr)
+      style += ` stroke: ${strokeStr}; stroke-width:${stroke ? strokeWidth : 0.5}px; stroke-linejoin:round`;
 
-    svg += `<path data-facetId="${f.id}" d="${d}" style="${style}"></path>`;
+    svg += `<path data-facetId="${f.id}" d="${d} Z" style="${style}"></path>`;
 
     if (addLabels) {
       const ox = f.labelBounds.minX * sizeMultiplier;
       const oy = f.labelBounds.minY * sizeMultiplier;
       const lw = f.labelBounds.width * sizeMultiplier;
       const lh = f.labelBounds.height * sizeMultiplier;
-      const digits = String(f.color).length;
-      
-      let computedFontSize = fontSize;
-      if (unifiedFontSize) {
-        // Enforce padding constraint (5% margin from borders: text must fit in 90% of box size)
-        const maxWidth = (lw * 0.9) / (digits * 0.6);
-        const maxHeight = lh * 0.9;
-        computedFontSize = Math.min(fontSize, maxWidth, maxHeight);
-        computedFontSize = Math.max(1, computedFontSize);
-      } else {
-        computedFontSize = fontSize / digits;
-      }
+      const computedFontSize = fontSize;
 
       // Center coords inside the bounds
       const cx = ox + lw / 2;
       const cy = oy + lh / 2;
 
-      svg +=
+      labels +=
         `<g class="label" data-facetId="${f.id}" data-color-index="${f.color}" transform="translate(${cx},${cy})">` +
-        `<text x="0" y="0" font-family="Tahoma" font-size="${computedFontSize}" dominant-baseline="middle" text-anchor="middle" fill="${fontColor}">${f.color}</text>` +
+        `<text x="0" y="0" font-family="Arial, sans-serif" font-weight="600" stroke="white" stroke-width="${Math.max(2, computedFontSize * 0.22)}" stroke-linejoin="round" paint-order="stroke fill" font-size="${computedFontSize}" dominant-baseline="middle" text-anchor="middle" fill="${fontColor}">${f.color}</text>` +
         `</g>`;
     }
   }
 
-  svg += `</svg>`;
+  svg += labels + `</svg>`;
   return svg;
 }

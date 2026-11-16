@@ -20,6 +20,7 @@ export interface ComparisonSliderProps {
   filledSvg: string;
   outlineSvg: string;
   initialSplit?: number;
+  layout?: 'split' | 'side-by-side';
   aspectRatio?: number; // width/height, defaults to inferred
   /**
    * Click delegation. Fires on any click inside the SVGs that isn't on the
@@ -42,6 +43,7 @@ const ComparisonSlider = forwardRef<ComparisonSliderHandle, ComparisonSliderProp
       filledSvg,
       outlineSvg,
       initialSplit = 0.5,
+      layout = 'split',
       aspectRatio,
       onFacetClick,
       onLabelClick,
@@ -107,7 +109,11 @@ const ComparisonSlider = forwardRef<ComparisonSliderHandle, ComparisonSliderProp
         let cur: Element | null = el;
         while (cur && cur !== node) {
           if (cur.classList?.contains('label')) {
-            const id = Number(cur.getAttribute('data-facetId') ?? cur.querySelector('[data-facetId]')?.getAttribute('data-facetId') ?? NaN);
+            const id = Number(
+              cur.getAttribute('data-facetId') ??
+                cur.querySelector('[data-facetId]')?.getAttribute('data-facetId') ??
+                NaN,
+            );
             if (Number.isFinite(id)) return { type: 'label', id };
           }
           const attr = cur.getAttribute('data-facetId');
@@ -141,10 +147,11 @@ const ComparisonSlider = forwardRef<ComparisonSliderHandle, ComparisonSliderProp
       <div
         ref={containerRef}
         className={cn(
+          layout === 'side-by-side' && 'grid sm:grid-cols-2 gap-3 p-3',
           'relative w-full overflow-hidden border-thick border-ink-900 rounded-md bg-cream-50 select-none',
           className,
         )}
-        style={aspectStyle}
+        style={layout === 'split' ? aspectStyle : undefined}
         onPointerMove={onPointerMove}
         onPointerUp={stopDrag}
         onPointerCancel={stopDrag}
@@ -154,59 +161,75 @@ const ComparisonSlider = forwardRef<ComparisonSliderHandle, ComparisonSliderProp
             sits on top and clips its left edge to the split point. */}
         <div
           ref={filledRef}
-          className="absolute inset-0 [&>svg]:block [&>svg]:w-full [&>svg]:h-full [&>img]:block [&>img]:w-full [&>img]:h-full [&>img]:object-cover"
+          style={layout === 'side-by-side' ? aspectStyle : undefined}
+          className={
+            (layout === 'side-by-side' ? 'relative min-w-0 ' : 'absolute inset-0 ') +
+            '[&>svg]:block [&>svg]:w-full [&>svg]:h-full [&>img]:block [&>img]:w-full [&>img]:h-full [&>img]:object-cover'
+          }
           aria-hidden="false"
         />
         {/* Outline (right side). clip-path inset hides everything left of the split. */}
         <div
           ref={outlineRef}
-          className="absolute inset-0 [&>svg]:block [&>svg]:w-full [&>svg]:h-full [&>img]:block [&>img]:w-full [&>img]:h-full [&>img]:object-cover"
-          style={{ clipPath: `inset(0 0 0 ${split * 100}%)` }}
+          className={
+            (layout === 'side-by-side'
+              ? 'relative min-w-0 bg-white '
+              : 'absolute inset-0 bg-white ') +
+            '[&>svg]:block [&>svg]:w-full [&>svg]:h-full [&>img]:block [&>img]:w-full [&>img]:h-full [&>img]:object-cover'
+          }
+          style={
+            layout === 'side-by-side' ? aspectStyle : { clipPath: `inset(0 0 0 ${split * 100}%)` }
+          }
           aria-hidden="false"
         />
 
-        {/* Divider rule */}
-        <div
-          className="absolute top-0 bottom-0 w-[3px] bg-ink-900 pointer-events-none"
-          style={{ left: `calc(${split * 100}% - 1.5px)` }}
-        />
-
-        {/* Handle */}
-        <div
-          data-slider-handle
-          role="slider"
-          aria-label="Reveal more outline or more filled preview"
-          aria-valuemin={0}
-          aria-valuemax={100}
-          aria-valuenow={Math.round(split * 100)}
-          tabIndex={0}
-          onKeyDown={(e) => {
-            if (e.key === 'ArrowLeft') setSplit((s) => clamp01(s - 0.02));
-            if (e.key === 'ArrowRight') setSplit((s) => clamp01(s + 0.02));
-          }}
-          onPointerDown={onPointerDown}
-          className={cn(
-            'absolute top-1/2 -translate-y-1/2 -translate-x-1/2',
-            'h-14 w-14 rounded-full border-thick border-ink-900 bg-mustard',
-            'grid place-items-center shadow-sticker',
-            'cursor-grab active:cursor-grabbing touch-none',
-            'transition-shadow duration-fast ease-squish',
-            'focus-visible:outline-none focus-visible:shadow-focus',
-            dragging && 'shadow-sticker-press translate-x-[calc(-50%+3px)] translate-y-[calc(-50%+3px)]',
-          )}
-          style={{ left: `${split * 100}%` }}
-        >
-          <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden>
-            <path
-              d="M9 6 L4 12 L9 18 M15 6 L20 12 L15 18"
-              fill="none"
-              stroke="var(--ink-900)"
-              strokeWidth="3"
-              strokeLinecap="round"
-              strokeLinejoin="round"
+        {layout === 'split' && (
+          <>
+            {/* Divider rule */}
+            <div
+              className="absolute top-0 bottom-0 w-[3px] bg-ink-900 pointer-events-none"
+              style={{ left: `calc(${split * 100}% - 1.5px)` }}
             />
-          </svg>
-        </div>
+
+            {/* Handle */}
+            <div
+              data-slider-handle
+              role="slider"
+              aria-label="Reveal more outline or more filled preview"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={Math.round(split * 100)}
+              tabIndex={0}
+              onKeyDown={(e) => {
+                if (e.key === 'ArrowLeft') setSplit((s) => clamp01(s - 0.02));
+                if (e.key === 'ArrowRight') setSplit((s) => clamp01(s + 0.02));
+              }}
+              onPointerDown={onPointerDown}
+              className={cn(
+                'absolute top-1/2 -translate-y-1/2 -translate-x-1/2',
+                'h-14 w-14 rounded-full border-thick border-ink-900 bg-mustard',
+                'grid place-items-center shadow-sticker',
+                'cursor-grab active:cursor-grabbing touch-none',
+                'transition-shadow duration-fast ease-squish',
+                'focus-visible:outline-none focus-visible:shadow-focus',
+                dragging &&
+                  'shadow-sticker-press translate-x-[calc(-50%+3px)] translate-y-[calc(-50%+3px)]',
+              )}
+              style={{ left: `${split * 100}%` }}
+            >
+              <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden>
+                <path
+                  d="M9 6 L4 12 L9 18 M15 6 L20 12 L15 18"
+                  fill="none"
+                  stroke="var(--ink-900)"
+                  strokeWidth="3"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            </div>
+          </>
+        )}
       </div>
     );
   },

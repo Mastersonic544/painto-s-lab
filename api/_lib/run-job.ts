@@ -26,6 +26,12 @@ const OUTLINE_BUCKET = 'piece-outlines';
 export interface RunJobOptions {
   /** Cap on the long edge of the bitmap before k-means runs. */
   resizeMaxEdge?: number;
+  detail?: number;
+  brightness?: number;
+  contrast?: number;
+  saturation?: number;
+  fontSize?: number;
+  strokeWidth?: number;
   /** Engine "remove facets smaller than N points" threshold. */
   minFacetSize?: number;
   /** Hard cap on the number of regions (facets). */
@@ -61,6 +67,8 @@ export async function runGenerationJob(
     .maybeSingle();
   if (pieceErr) throw new Error(`Load piece: ${pieceErr.message}`);
   if (!piece) throw new Error(`Piece ${pieceId} not found`);
+
+  opts = { ...piece.studio_settings, ...opts };
 
   if (piece.status !== 'queued') {
     // Idempotency: refuse to re-process unless explicitly re-queued.
@@ -113,11 +121,11 @@ export async function runGenerationJob(
     colorCount: piece.color_count,
     randomSeed: seed,
     renderMode,
-    strokeWidth,
-    fontSize: 18,
-    // Exact source skips chunk pruning and cleanup inside the engine.
-    // If undefined, the engine calculates the minFacetSize dynamically based on the font size.
-    minFacetSize: exactSource ? undefined : opts.minFacetSize,
+    strokeWidth: opts.strokeWidth ?? strokeWidth,
+    fontSize: opts.fontSize ?? 18,
+    brightnessBoost: opts.brightness ?? 1,
+    // Exponential scale gives useful control over both small and large regions.
+    minFacetSize: opts.minFacetSize ?? (opts.detail === undefined ? undefined : Math.round(500 * Math.pow(0.04, opts.detail / 100))),
     maxFacets: opts.maxFacets ?? (portrait ? 3500 : 3000),
     // Portrait keeps the thin contour lines: 0 = skip narrow-strip cleanup,
     // which would otherwise erase them into dashes.
@@ -126,8 +134,8 @@ export async function runGenerationJob(
     resizeMaxWidth: resizeMaxEdge,
     resizeMaxHeight: resizeMaxEdge,
     clusteringColorSpace: (portrait ? 'lab' : 'rgb') as 'lab' | 'rgb',
-    contrastBoost: portrait ? 1.1 : 1,
-    saturationBoost: portrait ? 1.1 : 1,
+    contrastBoost: opts.contrast ?? (portrait ? 1.1 : 1),
+    saturationBoost: opts.saturation ?? (portrait ? 1.1 : 1),
     // Portrait line-art: Canny contours burned black + flattened fills. Tune
     // line density live with CONVERTER_EDGE (0..1, higher = more lines).
     edgeEmphasis: portrait ? portraitEdgeStrength() : 0,

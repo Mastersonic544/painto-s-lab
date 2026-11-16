@@ -42,6 +42,7 @@ export interface GenerateOptions {
   clusteringColorSpace?: 'rgb' | 'hsl' | 'lab';
   /** Contrast multiplier applied before clustering (1 = none, 1.25 = +25%). */
   contrastBoost?: number;
+  brightnessBoost?: number;
   /** Saturation multiplier applied before clustering (1 = none). */
   saturationBoost?: number;
   /**
@@ -313,14 +314,14 @@ export function getMinFacetSizeForPiece(
   overrideMinFacetSize?: number,
 ): number {
   if (renderMode === 'exact_source') {
-    return Math.ceil(calculateMinFacetSize(fontSize / sizeMultiplier) * 4);
+    return overrideMinFacetSize ?? Math.ceil(calculateMinFacetSize(fontSize / sizeMultiplier) * 4);
   }
   if (overrideMinFacetSize !== undefined) {
     return overrideMinFacetSize;
   }
   const fontSizeInImageSpace = fontSize / sizeMultiplier;
   const baseArea = calculateMinFacetSize(fontSizeInImageSpace, 0.05);
-  // Apply a shape safety factor (1.5 for portrait, 2.5 for standard painting)
+  // Allow room for irregular shapes around the number.
   // to ensure irregular curved facets are large enough to paint/contain text.
   const multiplier = 4;
   return Math.ceil(baseArea * multiplier);
@@ -410,13 +411,18 @@ export async function generatePaintByNumbers(
   }
 
   // ----- Pre-pass (portrait mode): sharpen + edge contours + tone ----
-  if (renderMode !== 'exact_source') {
+  {
     const px = imgData.data as unknown as Uint8ClampedArray;
     const edge = options.edgeEmphasis ?? 0;
-    if (edge > 0) {
+    if (edge > 0 && renderMode !== 'exact_source') {
       portraitLineArt(px, imgData.width, imgData.height, edge);
     }
+    const brightness = options.brightnessBoost ?? 1;
+    for (let i = 0; i < px.length; i += 4) {
+      px[i] *= brightness; px[i + 1] *= brightness; px[i + 2] *= brightness;
+    }
     preprocessPixels(px, options.contrastBoost ?? 1, options.saturationBoost ?? 1);
+    if (renderMode === 'exact_source') ctx.putImageData(imgData, 0, 0);
   }
 
   // ----- k-means ---------------------------------------------
@@ -537,7 +543,7 @@ export async function generatePaintByNumbers(
   const serializedFacets = facetResult.facets
     .filter(f => f !== null)
     .map(f => {
-      const path = f.getFullPathFromBorderSegments(false);
+      const path = f.getFullPathFromBorderSegments(true);
       if (
         path.length > 0 &&
         (path[0].x !== path[path.length - 1].x ||
@@ -595,7 +601,7 @@ function renderSvg(
   fontSize: number,
   fontColor: string,
   strokeWidth: number = 1.0,
-  unifiedFontSize: boolean = true,
+  _unifiedFontSize: boolean = true,
   backgroundImageBase64?: string,
 ): string {
   const xmlns = 'http://www.w3.org/2000/svg';
@@ -610,6 +616,7 @@ function renderSvg(
     svg += `\n<image href="data:image/png;base64,${backgroundImageBase64}" x="0" y="0" width="${svgWidth}" height="${svgHeight}" opacity="1.0" style="pointer-events: none;" />`;
   }
 
+  let labels = "";
   for (const f of facetResult.facets) {
     if (f == null) continue;
     if (!('path' in f) && f.borderSegments.length === 0) continue;
@@ -618,7 +625,7 @@ function renderSvg(
     if ('path' in f) {
       path = f.path;
     } else {
-      path = f.getFullPathFromBorderSegments(false);
+      path = f.getFullPathFromBorderSegments(true);
       if (
         path[0].x !== path[path.length - 1].x ||
         path[0].y !== path[path.length - 1].y
@@ -644,40 +651,29 @@ function renderSvg(
     const strokeStr = stroke ? '#000' : fill ? rgbStr : '';
 
     let style = `fill: ${fillStr};`;
-    if (strokeStr) style += ` stroke: ${strokeStr}; stroke-width:${strokeWidth}px`;
+    if (strokeStr) style += ` stroke: ${strokeStr}; stroke-width:${stroke ? strokeWidth : 0.5}px; stroke-linejoin:round`;
 
-    svg += `<path data-facetId="${f.id}" d="${d}" style="${style}"></path>`;
+    svg += `<path data-facetId="${f.id}" d="${d} Z" style="${style}"></path>`;
 
     if (addLabels) {
       const ox = f.labelBounds.minX * sizeMultiplier;
       const oy = f.labelBounds.minY * sizeMultiplier;
       const lw = f.labelBounds.width * sizeMultiplier;
       const lh = f.labelBounds.height * sizeMultiplier;
-      const digits = String(f.color).length;
-      
-      let computedFontSize = fontSize;
-      if (unifiedFontSize) {
-        // Enforce padding constraint (5% margin from borders: text must fit in 90% of box size)
-        const maxWidth = (lw * 0.9) / (digits * 0.6);
-        const maxHeight = lh * 0.9;
-        computedFontSize = Math.min(fontSize, maxWidth, maxHeight);
-        computedFontSize = Math.max(1, computedFontSize);
-      } else {
-        computedFontSize = fontSize / digits;
-      }
+      const computedFontSize = fontSize;
 
       // Center coords inside the bounds
       const cx = ox + lw / 2;
       const cy = oy + lh / 2;
 
-      svg +=
+      labels +=
         `<g class="label" data-facetId="${f.id}" data-color-index="${f.color}" transform="translate(${cx},${cy})">` +
-        `<text x="0" y="0" font-family="Tahoma" font-size="${computedFontSize}" dominant-baseline="middle" text-anchor="middle" fill="${fontColor}">${f.color}</text>` +
+        `<text x="0" y="0" font-family="Arial, sans-serif" font-weight="600" stroke="white" stroke-width="${Math.max(2, computedFontSize * 0.22)}" stroke-linejoin="round" paint-order="stroke fill" font-size="${computedFontSize}" dominant-baseline="middle" text-anchor="middle" fill="${fontColor}">${f.color}</text>` +
         `</g>`;
     }
   }
 
-  svg += `</svg>`;
+  svg += labels + `</svg>`;
   return svg;
 }
 

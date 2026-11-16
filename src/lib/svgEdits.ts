@@ -170,6 +170,7 @@ export function indexOutlineLabelsByFacetId(outlineRoot: SvgRoot): void {
   const limit = Math.min(paths.length, labels.length);
   for (let i = 0; i < limit; i++) {
     const id = paths[i].getAttribute('data-facetId');
+    if (labels[i].hasAttribute('data-facetId')) continue;
     if (id) labels[i].setAttribute('data-facetId', id);
   }
 }

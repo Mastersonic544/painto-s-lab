@@ -6,8 +6,11 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 export const config = { maxDuration: 300 };
 
 function safeParse(s: string): Record<string, unknown> | null {
-  try { return JSON.parse(s) as Record<string, unknown>; }
-  catch { return null; }
+  try {
+    return JSON.parse(s) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -16,6 +19,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const pieceId = String(body.pieceId ?? '').trim();
   if (!pieceId) return res.status(400).json({ error: 'pieceId required' });
 
+  const options: Record<string, number> = {};
+  const ranges: Record<string, [number, number]> = {
+    detail: [0, 100],
+    brightness: [0.5, 1.5],
+    contrast: [0.5, 1.5],
+    saturation: [0, 2],
+    fontSize: [6, 48],
+    strokeWidth: [0.1, 5],
+  };
+  for (const [key, [min, max]] of Object.entries(ranges)) {
+    if (body[key] === undefined) continue;
+    const value = Number(body[key]);
+    if (!Number.isFinite(value) || value < min || value > max)
+      return res.status(400).json({ error: `Invalid ${key}` });
+    options[key] = value;
+  }
   const authHeader = req.headers.authorization ?? '';
   const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
   if (!token) return res.status(401).json({ error: 'Missing bearer token' });
@@ -33,7 +52,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!piece.data) return res.status(404).json({ error: 'Piece not found' });
 
   try {
-    const result = await runGenerationJob(admin, pieceId);
+    const result = await runGenerationJob(admin, pieceId, options);
     return res.status(200).json({ ok: true, ...result });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

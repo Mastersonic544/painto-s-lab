@@ -2,10 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import Button from '../components/ui/Button';
 import Card, { CardEyebrow, CardHeader, CardTitle } from '../components/ui/Card';
-import ComparisonSlider, {
-  ComparisonSliderHandle,
-} from '../components/ui/ComparisonSlider';
-import Input from '../components/ui/Input';
+import ComparisonSlider, { ComparisonSliderHandle } from '../components/ui/ComparisonSlider';
+import { tierFromCount } from '../lib/complexity';
 import Pill from '../components/ui/Pill';
 import Spinner from '../components/ui/Spinner';
 import { usePieceStatus } from '../hooks/usePieceStatus';
@@ -40,7 +38,7 @@ export default function PieceJob() {
   if (!piece) return <ErrorCard title="Not found" body="That piece doesn't exist." />;
 
   return (
-    <div className="max-w-container-lg flex flex-col gap-6">
+    <div className="w-full flex flex-col gap-6">
       <header className="flex items-end justify-between flex-wrap gap-3">
         <div>
           <span className="pl-label text-mustard-soft">Piece · {piece.status}</span>
@@ -57,7 +55,7 @@ export default function PieceJob() {
         </Link>
       </header>
 
-      {piece.status === 'queued' && <ProgressPanel />}
+      {piece.status === 'queued' && !piece.preview_svg_path && <ProgressPanel />}
       {piece.status === 'error' && (
         <Card>
           <CardHeader>
@@ -75,10 +73,16 @@ export default function PieceJob() {
         </Card>
       )}
 
-      {(piece.status === 'ready' ||
+      {((piece.status === 'queued' && Boolean(piece.preview_svg_path)) ||
+        (piece.status === 'error' && Boolean(piece.preview_svg_path)) ||
+        piece.status === 'ready' ||
         piece.status === 'approved' ||
         piece.status === 'archived') && (
         <ReviewArea
+          key={piece.id}
+          settings={piece.studio_settings}
+          sourceImageId={piece.source_image_id}
+          colorCount={piece.color_count}
           pieceId={piece.id}
           title={piece.title}
           status={piece.status}
@@ -100,8 +104,11 @@ export default function PieceJob() {
 
 function ReviewArea(props: {
   pieceId: string;
+  sourceImageId: string;
+  settings?: { detail: number; brightness: number; contrast: number; saturation: number };
+  colorCount: number;
   title: string;
-  status: 'ready' | 'approved' | 'archived';
+  status: 'error' | 'queued' | 'ready' | 'approved' | 'archived';
   previewPath: string;
   outlinePath: string;
   paletteJson: PaletteEntry[];
@@ -119,10 +126,38 @@ function ReviewArea(props: {
   const [mergeFrom, setMergeFrom] = useState<number | null>(null);
   const [selectedLabel, setSelectedLabel] = useState<number | null>(null);
   const [editCount, setEditCount] = useState(0);
-  const [saving, setSaving] = useState<'idle' | 'approve' | 'reject' | 'requeue' | 'regenerate'>('idle');
+  const [saving, setSaving] = useState<'idle' | 'approve' | 'reject' | 'requeue'>('idle');
   const [feedback, setFeedback] = useState<string | null>(null);
-  const [requeueCount, setRequeueCount] = useState(props.paletteJson.length || 16);
+  const [requeueCount, setRequeueCount] = useState(props.colorCount);
   const [strokeWidth, setStrokeWidth] = useState(1.0);
+  const [numberSize, setNumberSize] = useState(18);
+  const [detail, setDetail] = useState(props.settings?.detail ?? 50);
+  const [brightness, setBrightness] = useState(props.settings?.brightness ?? 1);
+  const [contrast, setContrast] = useState(props.settings?.contrast ?? 1);
+  const [saturation, setSaturation] = useState(props.settings?.saturation ?? 1);
+  const [sourceUrl, setSourceUrl] = useState<string | null>(null);
+  const [layout, setLayout] = useState<'split' | 'side-by-side'>('side-by-side');
+  const [zoom, setZoom] = useState(1);
+  const [showSource, setShowSource] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+  const busy = saving !== 'idle' || props.status === 'queued';
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const { data } = await supabase
+        .from('source_images')
+        .select('*')
+        .eq('id', props.sourceImageId)
+        .maybeSingle();
+      if (data) {
+        const url = await signedUrl('source-images', data.storage_path);
+        if (!cancelled) setSourceUrl(url);
+      }
+    })().catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [props.sourceImageId]);
   const [reloadKey, setReloadKey] = useState(0);
   // Load SVGs from storage on mount (fresh signed URLs).
   useEffect(() => {
@@ -139,6 +174,22 @@ function ReviewArea(props: {
           fetch(oUrl).then((r) => r.text()),
         ]);
         if (cancelled) return;
+        if (!loaded) {
+          const doc = new DOMParser().parseFromString(oText, 'image/svg+xml');
+          const width = parseFloat(
+            doc
+              .querySelector('path[data-facetId]')
+              ?.getAttribute('style')
+              ?.match(/stroke-width:\s*([\d.]+)/)?.[1] ?? '1',
+          );
+          const size = Math.max(
+            6,
+            Math.min(48, Number(doc.querySelector('text')?.getAttribute('font-size') ?? 18)),
+          );
+          setStrokeWidth(width);
+          setNumberSize(size);
+          setLoaded(true);
+        }
         setFilledSvg(fText);
         setOutlineSvg(oText);
       } catch (err) {
@@ -160,14 +211,43 @@ function ReviewArea(props: {
     return () => window.clearTimeout(id);
   }, [filledSvg, outlineSvg]);
 
+  useEffect(() => {
+    if (!filledSvg || !outlineSvg) return;
+    const timer = window.setTimeout(() => {
+      const outline = sliderRef.current?.getOutlineRoot();
+      const filled = sliderRef.current?.getFilledRoot();
+      outline?.querySelectorAll<SVGPathElement>('path[data-facetId]').forEach((p) => {
+        p.style.strokeWidth = `${strokeWidth}px`;
+        p.style.strokeLinejoin = 'round';
+      });
+      for (const root of [filled, outline])
+        root?.querySelectorAll<SVGTextElement>('g.label text').forEach((text) => {
+          text.setAttribute('font-size', String(numberSize));
+          text.setAttribute('stroke', 'white');
+          text.setAttribute('stroke-width', String(Math.max(2, numberSize * 0.22)));
+          text.setAttribute('paint-order', 'stroke fill');
+          text.setAttribute('stroke-linejoin', 'round');
+        });
+      filled?.querySelectorAll<SVGPathElement>('path[data-facetId]').forEach((p) => {
+        if (p.style.fill !== 'none') {
+          p.style.strokeWidth = '0.5px';
+          p.style.strokeLinejoin = 'round';
+        } else p.style.strokeWidth = `${strokeWidth}px`;
+      });
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [strokeWidth, numberSize, filledSvg, outlineSvg]);
+
   // Selected-facet highlight: walk the SVG roots and stamp a CSS marker
   // on the currently-selected path / label.
   useEffect(() => {
     const filled = sliderRef.current?.getFilledRoot();
     const outline = sliderRef.current?.getOutlineRoot();
-    filled?.querySelectorAll('[data-pl-selected]')
+    filled
+      ?.querySelectorAll('[data-pl-selected]')
       .forEach((el) => el.removeAttribute('data-pl-selected'));
-    outline?.querySelectorAll('[data-pl-selected]')
+    outline
+      ?.querySelectorAll('[data-pl-selected]')
       .forEach((el) => el.removeAttribute('data-pl-selected'));
     if (selectedFacet != null) {
       filled
@@ -189,10 +269,11 @@ function ReviewArea(props: {
   // Arrow keys nudge the selected label by 15 user units (~5 display px
   // at the engine's default 3× size multiplier).
   useEffect(() => {
-    if (editMode !== 'nudge' || selectedLabel == null) return;
+    if (busy || editMode !== 'nudge' || selectedLabel == null) return;
     const NUDGE = 15;
     const handler = (e: KeyboardEvent) => {
       if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) return;
+      if ((e.target as HTMLElement).closest('input, textarea, select, button')) return;
       e.preventDefault();
       const step = e.shiftKey ? NUDGE * 3 : NUDGE;
       let dx = 0;
@@ -206,9 +287,10 @@ function ReviewArea(props: {
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [editMode, selectedLabel]);
+  }, [editMode, selectedLabel, busy]);
 
   function onFacetClick(facetId: number) {
+    if (busy) return;
     if (editMode === 'recolor') {
       setSelectedFacet(facetId);
     } else if (editMode === 'merge') {
@@ -233,6 +315,7 @@ function ReviewArea(props: {
   }
 
   function onLabelClick(facetId: number) {
+    if (busy) return;
     if (editMode === 'nudge') {
       setSelectedLabel(facetId);
     }
@@ -313,6 +396,7 @@ function ReviewArea(props: {
   }
 
   async function requeue() {
+    if (busy) return;
     setSaving('requeue');
     setFeedback(null);
     const newCount = Math.max(2, Math.min(64, Math.round(requeueCount)));
@@ -321,9 +405,9 @@ function ReviewArea(props: {
       .update({
         status: 'queued',
         color_count: newCount,
-        preview_svg_path: null,
-        outline_svg_path: null,
-        palette_json: null,
+        complexity: tierFromCount(newCount),
+        stroke_width: strokeWidth,
+        studio_settings: { detail, brightness, contrast, saturation },
         error_message: null,
       })
       .eq('id', props.pieceId);
@@ -342,54 +426,35 @@ function ReviewArea(props: {
           'content-type': 'application/json',
           authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ pieceId: props.pieceId }),
+        body: JSON.stringify({
+          pieceId: props.pieceId,
+          detail,
+          brightness,
+          contrast,
+          saturation,
+          fontSize: numberSize,
+          strokeWidth,
+        }),
       });
-      const result = await response.json().catch(() => ({})) as { error?: string };
-      if (!response.ok) throw new Error(result.error ?? `Generation failed (HTTP ${response.status}).`);
-      setFeedback('New version ready.');
+      const result = (await response.json().catch(() => ({}))) as { error?: string };
+      if (!response.ok)
+        throw new Error(result.error ?? `Generation failed (HTTP ${response.status}).`);
+      const fresh = await supabase.from('pieces').select('*').eq('id', props.pieceId).single();
+      if (fresh.error) throw fresh.error;
+      if (fresh.data?.palette_json) setPalette(fresh.data.palette_json);
+      setReloadKey((k) => k + 1);
+      setEditCount(0);
+      clearSelection();
+      setFeedback('New version ready. Keep tweaking, or save and approve.');
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      await supabase.from('pieces').update({ status: 'error', error_message: message }).eq('id', props.pieceId);
+      await supabase
+        .from('pieces')
+        .update({ status: 'error', error_message: message })
+        .eq('id', props.pieceId);
       setFeedback(message);
     }
     setSaving('idle');
-  }
-
-  // Regenerate files: send strokeWidth to /api/regenerate to rebuild SVGs
-  // from cache, avoiding a full k-means recalculation.
-  async function regenerateFiles() {
-    setSaving('regenerate');
-    setFeedback(null);
-    const sw = Math.max(0.1, Math.min(10, strokeWidth));
-    try {
-      const session = await supabase.auth.getSession();
-      const token = session.data.session?.access_token;
-      if (!token) throw new Error('Missing session token');
-
-      const resp = await fetch('/api/regenerate', {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ pieceId: props.pieceId, strokeWidth: sw }),
-      });
-      const data = await resp.json();
-      if (!resp.ok) {
-        throw new Error(data.error ?? `Server error: ${resp.status}`);
-      }
-
-      if (data.queued) {
-        setFeedback('Cache missing on older piece. Falling back to full background generation, please wait...');
-      } else {
-        setReloadKey((k) => k + 1);
-        setFeedback('Files successfully regenerated with new stroke width.');
-      }
-    } catch (err) {
-      setFeedback(err instanceof Error ? err.message : String(err));
-    } finally {
-      setSaving('idle');
-    }
   }
 
   const aspect = useMemo(() => {
@@ -411,14 +476,26 @@ function ReviewArea(props: {
     const doc = new DOMParser().parseFromString(svgText, 'image/svg+xml');
     const root = doc.documentElement;
     const box = root.getAttribute('viewBox')!.split(/\s+/).map(Number);
-    const w = props.canvasW, h = props.canvasH;
+    const w = props.canvasW,
+      h = props.canvasH;
     const scale = Math.min((w - 5) / box[2], (h - 5) / box[3]);
     const g = doc.createElementNS(root.namespaceURI, 'g');
     while (root.firstChild) g.appendChild(root.firstChild);
-    g.setAttribute('transform', `translate(${(w-box[2]*scale)/2},${(h-box[3]*scale)/2}) scale(${scale})`);
-    root.setAttribute('width', `${w}cm`); root.setAttribute('height', `${h}cm`); root.setAttribute('viewBox', `0 0 ${w} ${h}`);
-    const bg = doc.createElementNS(root.namespaceURI, 'rect'); bg.setAttribute('width', String(w)); bg.setAttribute('height', String(h)); bg.setAttribute('fill', 'white'); root.append(bg, g);
-    const blob = new Blob([new XMLSerializer().serializeToString(root)], { type: 'image/svg+xml;charset=utf-8' });
+    g.setAttribute(
+      'transform',
+      `translate(${(w - box[2] * scale) / 2},${(h - box[3] * scale) / 2}) scale(${scale})`,
+    );
+    root.setAttribute('width', `${w}cm`);
+    root.setAttribute('height', `${h}cm`);
+    root.setAttribute('viewBox', `0 0 ${w} ${h}`);
+    const bg = doc.createElementNS(root.namespaceURI, 'rect');
+    bg.setAttribute('width', String(w));
+    bg.setAttribute('height', String(h));
+    bg.setAttribute('fill', 'white');
+    root.append(bg, g);
+    const blob = new Blob([new XMLSerializer().serializeToString(root)], {
+      type: 'image/svg+xml;charset=utf-8',
+    });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -511,69 +588,224 @@ function ReviewArea(props: {
   }
 
   return (
-    <div className="grid lg:grid-cols-[1fr_280px] gap-6">
-      <div className="flex flex-col gap-4">
+    <div className="grid xl:grid-cols-[minmax(0,1fr)_320px] gap-6 items-start">
+      <div className="flex min-w-0 flex-col gap-4 xl:sticky xl:top-6">
         {/* Selection / merge CSS — tagged via setAttribute on the live DOM. */}
         <style>{styleSheet}</style>
 
-        {filledSvg && outlineSvg ? (
-          <ComparisonSlider
-            ref={sliderRef}
-            filledSvg={filledSvg}
-            outlineSvg={outlineSvg}
-            aspectRatio={aspect}
-            initialSplit={0.5}
-            onFacetClick={onFacetClick}
-            onLabelClick={onLabelClick}
-          />
-        ) : (
-          <div className="aspect-video grid place-items-center border-thick border-ink-900 rounded-md bg-cream-50">
-            <Spinner size="lg" />
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="pl-label text-cream-200 mr-auto">
+            Your artwork studio · colors / painting template
+          </span>
+          <Pill active={layout === 'side-by-side'} onClick={() => setLayout('side-by-side')}>
+            Side by side
+          </Pill>
+          <Pill active={layout === 'split'} onClick={() => setLayout('split')}>
+            Compare
+          </Pill>
+          <Pill active={showSource} onClick={() => setShowSource((v) => !v)}>
+            Source photo
+          </Pill>
+        </div>
+        {showSource && sourceUrl && (
+          <div className="rounded-md border-thick border-ink-900 bg-cream-50 p-3">
+            <img
+              src={sourceUrl}
+              alt="Source photo with pending image adjustments"
+              className="max-h-72 mx-auto"
+              style={{
+                filter: `brightness(${brightness}) contrast(${contrast}) saturate(${saturation})`,
+              }}
+            />
           </div>
         )}
-
-        <Card>
-          <CardHeader>
-            <CardEyebrow>Light edits</CardEyebrow>
-            <CardTitle>Make it sellable before approving</CardTitle>
-          </CardHeader>
-          <div className="flex flex-wrap items-center gap-2">
-            {(['view', 'recolor', 'merge', 'nudge'] as EditMode[]).map((m) => (
-              <Pill
-                key={m}
-                active={editMode === m}
-                onClick={() => {
-                  setEditMode(m);
-                  clearSelection();
-                }}
-              >
-                {m}
-              </Pill>
-            ))}
-            <span className="pl-label text-text-on-light-muted ml-auto">
-              {editCount} edit{editCount === 1 ? '' : 's'} pending
-            </span>
-          </div>
-          <EditHint
-            mode={editMode}
-            selectedFacet={selectedFacet}
-            mergeFrom={mergeFrom}
-            selectedLabel={selectedLabel}
+        <label className="flex gap-3 items-center text-cream-200 text-sm">
+          Zoom {zoom.toFixed(1)}×
+          <input
+            aria-label="Artwork zoom"
+            className="accent-mustard flex-1"
+            type="range"
+            min="1"
+            max="3"
+            step="0.1"
+            value={zoom}
+            onChange={(e) => setZoom(Number(e.target.value))}
           />
+        </label>
+        <div className="overflow-auto max-h-[75vh] rounded-md" aria-busy={busy}>
+          <div style={{ width: `${zoom * 100}%` }}>
+            {filledSvg && outlineSvg ? (
+              <ComparisonSlider
+                layout={layout}
+                ref={sliderRef}
+                filledSvg={filledSvg}
+                outlineSvg={outlineSvg}
+                aspectRatio={aspect}
+                initialSplit={0.5}
+                onFacetClick={onFacetClick}
+                onLabelClick={onLabelClick}
+              />
+            ) : (
+              <div className="aspect-video grid place-items-center border-thick border-ink-900 rounded-md bg-cream-50">
+                <Spinner size="lg" />
+              </div>
+            )}
+          </div>
+        </div>
+        {busy && (
+          <p role="status" className="text-mustard-soft">
+            Updating artwork… Your previous version stays visible.
+          </p>
+        )}
+        <fieldset disabled={busy} className="min-w-0">
+          <Card>
+            <CardHeader>
+              <CardEyebrow>Light edits</CardEyebrow>
+              <CardTitle>Paint it your way</CardTitle>
+            </CardHeader>
+            <div className="flex flex-wrap items-center gap-2">
+              {(['view', 'recolor', 'merge', 'nudge'] as EditMode[]).map((m) => (
+                <Pill
+                  key={m}
+                  active={editMode === m}
+                  onClick={() => {
+                    setEditMode(m);
+                    clearSelection();
+                  }}
+                >
+                  {m}
+                </Pill>
+              ))}
+              <span className="pl-label text-text-on-light-muted ml-auto">
+                {editCount} edit{editCount === 1 ? '' : 's'} pending
+              </span>
+            </div>
+            <EditHint
+              mode={editMode}
+              selectedFacet={selectedFacet}
+              mergeFrom={mergeFrom}
+              selectedLabel={selectedLabel}
+            />
 
-          {editMode === 'recolor' && selectedFacet != null && (
-            <ColorPicker palette={palette} onPick={applyRecolor} />
-          )}
-        </Card>
-
+            {editMode === 'recolor' && selectedFacet != null && (
+              <ColorPicker palette={palette} onPick={applyRecolor} />
+            )}
+          </Card>
+        </fieldset>
         {feedback && (
-          <div className="border-thick border-cream-200 rounded-md bg-swamp-600 text-cream-50 p-3 font-body">
+          <div
+            role="status"
+            className="border-thick border-cream-200 rounded-md bg-swamp-600 text-cream-50 p-3 font-body"
+          >
             {feedback}
           </div>
         )}
       </div>
 
       <aside className="flex flex-col gap-4">
+        <Card>
+          <CardHeader>
+            <CardEyebrow>Fine tune</CardEyebrow>
+            <CardTitle>Make it yours</CardTitle>
+          </CardHeader>
+          <fieldset disabled={busy || !ready} className="flex flex-col gap-5 min-w-0">
+            <StudioRange
+              label="Line thickness"
+              value={strokeWidth}
+              min={0.1}
+              max={5}
+              step={0.1}
+              display={`${strokeWidth.toFixed(1)} px`}
+              onChange={(v) => {
+                setStrokeWidth(v);
+                setEditCount((n) => n + 1);
+              }}
+            />
+            <StudioRange
+              label="Number size"
+              value={numberSize}
+              min={6}
+              max={48}
+              display={`${Math.round(numberSize)} px`}
+              onChange={(v) => {
+                setNumberSize(v);
+                setEditCount((n) => n + 1);
+              }}
+            />
+            <p className="text-sm text-text-on-light-muted">
+              Lines and numbers update instantly, with a white halo around every number.
+            </p>
+            <div className="border-t-2 border-ink-900 pt-4 flex flex-col gap-5">
+              <StudioRange
+                label="Colors"
+                value={requeueCount}
+                min={4}
+                max={32}
+                display={`${requeueCount} paints`}
+                onChange={setRequeueCount}
+              />
+              <StudioRange
+                label="Detail"
+                value={detail}
+                min={0}
+                max={100}
+                display={detail < 34 ? 'Simple' : detail < 67 ? 'Balanced' : 'Detailed'}
+                onChange={setDetail}
+              />
+              <p className="text-sm text-text-on-light-muted">
+                Less detail merges small areas into larger shapes. More colors preserves more tones.
+              </p>
+              <details>
+                <summary className="cursor-pointer font-bold text-sm">
+                  Adjust the source photo
+                </summary>
+                <div className="flex flex-col gap-4 mt-4">
+                  <StudioRange
+                    label="Brightness"
+                    value={brightness}
+                    min={0.5}
+                    max={1.5}
+                    step={0.05}
+                    display={`${Math.round(brightness * 100)}%`}
+                    onChange={(v) => {
+                      setBrightness(v);
+                      setShowSource(true);
+                    }}
+                  />
+                  <StudioRange
+                    label="Contrast"
+                    value={contrast}
+                    min={0.5}
+                    max={1.5}
+                    step={0.05}
+                    display={`${Math.round(contrast * 100)}%`}
+                    onChange={(v) => {
+                      setContrast(v);
+                      setShowSource(true);
+                    }}
+                  />
+                  <StudioRange
+                    label="Saturation"
+                    value={saturation}
+                    min={0}
+                    max={2}
+                    step={0.05}
+                    display={`${Math.round(saturation * 100)}%`}
+                    onChange={(v) => {
+                      setSaturation(v);
+                      setShowSource(true);
+                    }}
+                  />
+                </div>
+              </details>
+              <p className="text-xs text-text-on-light-muted">
+                Updating rebuilds regions and replaces manual edits. Download or approve your
+                current version first if you want to keep it.
+              </p>
+              <Button onClick={requeue}>Update artwork</Button>
+            </div>
+          </fieldset>
+        </Card>
         <Card>
           <CardHeader>
             <CardEyebrow>Status</CardEyebrow>
@@ -611,61 +843,23 @@ function ReviewArea(props: {
             <CardTitle>Export this piece</CardTitle>
           </CardHeader>
           <div className="flex flex-col gap-2">
-            <Button variant="secondary" onClick={downloadTemplate} disabled={!ready}>
+            <Button variant="secondary" onClick={downloadTemplate} disabled={!ready || busy}>
               Outline + numbers (B&amp;W)
             </Button>
-            <Button variant="secondary" onClick={downloadColorsNumbers} disabled={!ready}>
+            <Button variant="secondary" onClick={downloadColorsNumbers} disabled={!ready || busy}>
               Colors + numbers
             </Button>
-            <Button variant="secondary" onClick={downloadColorsOnly} disabled={!ready}>
+            <Button variant="secondary" onClick={downloadColorsOnly} disabled={!ready || busy}>
               Colors only (final)
             </Button>
-            <Button
-              variant="tertiary"
-              onClick={downloadColorSheet}
-              disabled={palette.length === 0}
-            >
+            <Button variant="tertiary" onClick={downloadColorSheet} disabled={palette.length === 0}>
               Color code sheet (PDF)
             </Button>
           </div>
           <p className="pl-label text-text-on-light-muted mt-3">
-            SVGs are vector and reflect your edits. The code sheet opens a print
-            dialog — choose "Save as PDF".
+            SVGs are vector and reflect your edits. The code sheet opens a print dialog — choose
+            "Save as PDF".
           </p>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardEyebrow>Rendering</CardEyebrow>
-            <CardTitle>Outline controls</CardTitle>
-          </CardHeader>
-          <div className="flex flex-col gap-3">
-            <label className="flex flex-col gap-1">
-              <span className="pl-label text-text-on-light-muted">
-                Stroke width: {strokeWidth.toFixed(1)}px
-              </span>
-              <input
-                type="range"
-                min="0.1"
-                max="5"
-                step="0.1"
-                value={strokeWidth}
-                onChange={(e) => { const w = Number(e.target.value); setStrokeWidth(w); sliderRef.current?.getOutlineRoot()?.querySelectorAll<SVGPathElement>('path[data-facetId]').forEach(p => { p.style.strokeWidth = `${w}px`; }); setEditCount(n => n + 1); }}
-                className="accent-swamp-600"
-              />
-            </label>
-            <Button
-              variant="secondary"
-              onClick={regenerateFiles}
-              loading={saving === 'regenerate'}
-            >
-              Regenerate files
-            </Button>
-            <p className="pl-label text-text-on-light-muted">
-              Locks in the current stroke width. Re-runs the engine with this
-              exact value.
-            </p>
-          </div>
         </Card>
 
         <Card>
@@ -673,7 +867,12 @@ function ReviewArea(props: {
             <CardEyebrow>Approve</CardEyebrow>
             <CardTitle>Send to the Hub</CardTitle>
           </CardHeader>
-          <Button onClick={approve} loading={saving === 'approve'} className="w-full">
+          <Button
+            onClick={approve}
+            loading={saving === 'approve'}
+            disabled={busy || !ready}
+            className="w-full"
+          >
             Approve
             {editCount > 0 && ` (save ${editCount} edit${editCount === 1 ? '' : 's'})`}
           </Button>
@@ -682,26 +881,17 @@ function ReviewArea(props: {
         <Card>
           <CardHeader>
             <CardEyebrow>Reject</CardEyebrow>
-            <CardTitle>Discard or re-queue</CardTitle>
+            <CardTitle>Archive this piece</CardTitle>
           </CardHeader>
           <div className="flex flex-col gap-3">
-            <Button variant="tertiary" onClick={discardPiece} loading={saving === 'reject'}>
+            <Button
+              variant="tertiary"
+              onClick={discardPiece}
+              loading={saving === 'reject'}
+              disabled={busy}
+            >
               Discard
             </Button>
-            <div className="flex flex-col gap-2">
-              <Input
-                label="Re-queue with"
-                type="number"
-                min={2}
-                max={64}
-                value={requeueCount}
-                onChange={(e) => setRequeueCount(Number(e.target.value) || 16)}
-                trailingAddon="colors"
-              />
-              <Button variant="secondary" onClick={requeue} loading={saving === 'requeue'}>
-                Send back to the converter
-              </Button>
-            </div>
           </div>
         </Card>
       </aside>
@@ -721,11 +911,13 @@ function EditHint({
   selectedLabel: number | null;
 }) {
   let text = '';
-  if (mode === 'view') text = 'Drag the knob to reveal more of either side.';
+  if (mode === 'view')
+    text =
+      'Compare the colors and template. Zoom in to inspect small areas, or choose an editing tool.';
   if (mode === 'recolor')
     text =
       selectedFacet == null
-        ? 'Click a region to recolor it. The whole color group repaints.'
+        ? 'Click a region to recolor it. Choose a replacement paint for this region.'
         : `Picked region. Choose a new color below.`;
   if (mode === 'merge')
     text =
@@ -800,7 +992,10 @@ function ProgressPanel() {
         <div className="flex-1 flex flex-col gap-3">
           <CardEyebrow>Generating</CardEyebrow>
           <CardTitle>Building colors, borders, and labels…</CardTitle>
-          <p className="text-text-on-light">Elapsed: {Math.floor(seconds / 60)}m {seconds % 60}s. This usually takes a minute or two.</p>
+          <p className="text-text-on-light">
+            Elapsed: {Math.floor(seconds / 60)}m {seconds % 60}s. This usually takes a minute or
+            two.
+          </p>
         </div>
       </div>
     </Card>
@@ -865,3 +1060,39 @@ g.label[data-pl-selected="true"] text {
 // Tells the rgbStrToHex helper to be referenced so the import stays alive
 // for the future PR that adds palette growth.
 void rgbStrToHex;
+
+function StudioRange({
+  label,
+  value,
+  min,
+  max,
+  step = 1,
+  display,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  step?: number;
+  display: string;
+  onChange: (value: number) => void;
+}) {
+  return (
+    <label className="flex flex-col gap-2 text-sm text-text-on-light">
+      <span className="flex justify-between gap-2 font-bold">
+        {label}
+        <span className="font-mono text-text-on-light-muted">{display}</span>
+      </span>
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+        className="w-full h-6 accent-swamp-600 cursor-pointer focus-visible:outline-2 focus-visible:outline-swamp-600"
+      />
+    </label>
+  );
+}
