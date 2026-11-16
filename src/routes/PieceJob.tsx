@@ -408,7 +408,17 @@ function ReviewArea(props: {
     return (root?.querySelector('svg') as SVGSVGElement | null) ?? null;
   }
   function save(filename: string, svgText: string) {
-    const blob = new Blob([svgText], { type: 'image/svg+xml;charset=utf-8' });
+    const doc = new DOMParser().parseFromString(svgText, 'image/svg+xml');
+    const root = doc.documentElement;
+    const box = root.getAttribute('viewBox')!.split(/\s+/).map(Number);
+    const w = props.canvasW, h = props.canvasH;
+    const scale = Math.min((w - 5) / box[2], (h - 5) / box[3]);
+    const g = doc.createElementNS(root.namespaceURI, 'g');
+    while (root.firstChild) g.appendChild(root.firstChild);
+    g.setAttribute('transform', `translate(${(w-box[2]*scale)/2},${(h-box[3]*scale)/2}) scale(${scale})`);
+    root.setAttribute('width', `${w}cm`); root.setAttribute('height', `${h}cm`); root.setAttribute('viewBox', `0 0 ${w} ${h}`);
+    const bg = doc.createElementNS(root.namespaceURI, 'rect'); bg.setAttribute('width', String(w)); bg.setAttribute('height', String(h)); bg.setAttribute('fill', 'white'); root.append(bg, g);
+    const blob = new Blob([new XMLSerializer().serializeToString(root)], { type: 'image/svg+xml;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -640,7 +650,7 @@ function ReviewArea(props: {
                 max="5"
                 step="0.1"
                 value={strokeWidth}
-                onChange={(e) => setStrokeWidth(Number(e.target.value))}
+                onChange={(e) => { const w = Number(e.target.value); setStrokeWidth(w); sliderRef.current?.getOutlineRoot()?.querySelectorAll<SVGPathElement>('path[data-facetId]').forEach(p => { p.style.strokeWidth = `${w}px`; }); setEditCount(n => n + 1); }}
                 className="accent-swamp-600"
               />
             </label>

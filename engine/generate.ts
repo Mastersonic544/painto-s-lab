@@ -313,7 +313,7 @@ export function getMinFacetSizeForPiece(
   overrideMinFacetSize?: number,
 ): number {
   if (renderMode === 'exact_source') {
-    return 1; // Bypass small chunk pruning in exact source mode
+    return Math.ceil(calculateMinFacetSize(fontSize / sizeMultiplier) * 4);
   }
   if (overrideMinFacetSize !== undefined) {
     return overrideMinFacetSize;
@@ -322,7 +322,7 @@ export function getMinFacetSizeForPiece(
   const baseArea = calculateMinFacetSize(fontSizeInImageSpace, 0.05);
   // Apply a shape safety factor (1.5 for portrait, 2.5 for standard painting)
   // to ensure irregular curved facets are large enough to paint/contain text.
-  const multiplier = renderMode === 'portrait' ? 1.5 : 2.5;
+  const multiplier = 4;
   return Math.ceil(baseArea * multiplier);
 }
 
@@ -344,7 +344,7 @@ export async function generatePaintByNumbers(
   settings.randomSeed = options.randomSeed === 0 ? 1 : options.randomSeed;
 
   const sizeMultiplier = options.sizeMultiplier ?? 3;
-  const fontSize = options.fontSize ?? 12;
+  const fontSize = options.fontSize ?? 18;
   const renderMode = options.renderMode ?? 'painting';
 
   const finalMinFacetSize = getMinFacetSizeForPiece(

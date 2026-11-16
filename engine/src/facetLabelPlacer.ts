@@ -41,7 +41,7 @@ export class FacetLabelPlacer {
                 const result = polylabel(polyRings);
                 f.labelBounds = new BoundingBox();
                 // determine inner square within the circle
-                const innerPadding = 2 * Math.sqrt(2 * result.distance);
+                const innerPadding = Math.max(0, result.distance) / Math.SQRT2;
                 f.labelBounds.minX = result.pt.x - innerPadding;
                 f.labelBounds.maxX = result.pt.x + innerPadding;
                 f.labelBounds.minY = result.pt.y - innerPadding;

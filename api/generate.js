@@ -1873,7 +1873,7 @@ var FacetLabelPlacer = class _FacetLabelPlacer {
         }
         const result = polylabel(polyRings);
         f.labelBounds = new BoundingBox();
-        const innerPadding = 2 * Math.sqrt(2 * result.distance);
+        const innerPadding = Math.max(0, result.distance) / Math.SQRT2;
         f.labelBounds.minX = result.pt.x - innerPadding;
         f.labelBounds.maxX = result.pt.x + innerPadding;
         f.labelBounds.minY = result.pt.y - innerPadding;
@@ -2345,14 +2345,14 @@ function calculateMinFacetSize(fontSizeInImageSpace, paddingPct = 0.05) {
 }
 function getMinFacetSizeForPiece(renderMode, fontSize, sizeMultiplier, overrideMinFacetSize) {
   if (renderMode === "exact_source") {
-    return 1;
+    return Math.ceil(calculateMinFacetSize(fontSize / sizeMultiplier) * 4);
   }
   if (overrideMinFacetSize !== void 0) {
     return overrideMinFacetSize;
   }
   const fontSizeInImageSpace = fontSize / sizeMultiplier;
   const baseArea = calculateMinFacetSize(fontSizeInImageSpace, 0.05);
-  const multiplier = renderMode === "portrait" ? 1.5 : 2.5;
+  const multiplier = 4;
   return Math.ceil(baseArea * multiplier);
 }
 async function generatePaintByNumbers(imageBuffer, options) {
@@ -2366,7 +2366,7 @@ async function generatePaintByNumbers(imageBuffer, options) {
   settings.kMeansNrOfClusters = options.colorCount;
   settings.randomSeed = options.randomSeed === 0 ? 1 : options.randomSeed;
   const sizeMultiplier = options.sizeMultiplier ?? 3;
-  const fontSize = options.fontSize ?? 12;
+  const fontSize = options.fontSize ?? 18;
   const renderMode = options.renderMode ?? "painting";
   const finalMinFacetSize = getMinFacetSizeForPiece(
     renderMode,
@@ -2676,7 +2676,7 @@ async function runGenerationJob(admin, pieceId, opts = {}) {
     randomSeed: seed,
     renderMode,
     strokeWidth,
-    fontSize: 12,
+    fontSize: 18,
     // Exact source skips chunk pruning and cleanup inside the engine.
     // If undefined, the engine calculates the minFacetSize dynamically based on the font size.
     minFacetSize: exactSource ? void 0 : opts.minFacetSize,

@@ -114,7 +114,7 @@ export async function runGenerationJob(
     randomSeed: seed,
     renderMode,
     strokeWidth,
-    fontSize: 12,
+    fontSize: 18,
     // Exact source skips chunk pruning and cleanup inside the engine.
     // If undefined, the engine calculates the minFacetSize dynamically based on the font size.
     minFacetSize: exactSource ? undefined : opts.minFacetSize,

@@ -7,7 +7,7 @@ import ImageCropper from '../components/ui/ImageCropper';
 import Input from '../components/ui/Input';
 import Radio from '../components/ui/Radio';
 import Spinner from '../components/ui/Spinner';
-import { CropRect, FULL_CROP, cropImageFile, pxToCanvasCm } from '../lib/image';
+import { CropRect, FULL_CROP, cropImageFile } from '../lib/image';
 import {
   AlgorithmicScore,
   ComplexityDecision,
@@ -42,12 +42,11 @@ export default function Intake() {
   const [file, setFile] = useState<File | null>(null);
   const [title, setTitle] = useState('');
   const [mode, setMode] = useState<Mode>('auto');
-  // Canvas size is derived automatically from the (cropped) photo, not picked.
-  const [canvasW, setCanvasW] = useState<number>(40);
-  const [canvasH, setCanvasH] = useState<number>(50);
+  // Physical export size, independent of source resolution.
+  const [canvasW, setCanvasW] = useState<number>(100);
+  const [canvasH, setCanvasH] = useState<number>(100);
   const [coats, setCoats] = useState<number>(2);
   const [crop, setCrop] = useState<CropRect>(FULL_CROP);
-  const [natural, setNatural] = useState<{ w: number; h: number } | null>(null);
   const [composing, setComposing] = useState(false);
   // Object URL of the cropped image, shown on the review screen.
   const [reviewPreview, setReviewPreview] = useState<string | null>(null);
@@ -78,23 +77,6 @@ export default function Intake() {
     };
   }, [reviewPreview]);
 
-  // Read the photo's natural pixel size so we can derive the canvas size.
-  useEffect(() => {
-    if (!previewUrl) {
-      setNatural(null);
-      return;
-    }
-    const img = new Image();
-    img.onload = () => setNatural({ w: img.naturalWidth, h: img.naturalHeight });
-    img.src = previewUrl;
-  }, [previewUrl]);
-
-  // Canvas size in cm, derived from the cropped pixel dimensions at 300 DPI.
-  const derivedCm = useMemo(() => {
-    if (!natural) return null;
-    return pxToCanvasCm(natural.w * crop.w, natural.h * crop.h);
-  }, [natural, crop]);
-
   function onFile(next: File) {
     setFile(next);
     setCrop(FULL_CROP);
@@ -111,12 +93,8 @@ export default function Intake() {
     setComposing(true);
 
     try {
-      // Re-cut the photo to the crop, then lock the canvas size to the
-      // cropped pixels (300 DPI). Everything downstream sees the crop only.
-      const { file: cropped, widthPx, heightPx } = await cropImageFile(file, crop);
-      const size = pxToCanvasCm(widthPx, heightPx);
-      setCanvasW(size.w);
-      setCanvasH(size.h);
+      // Everything downstream sees the cropped photo.
+      const { file: cropped } = await cropImageFile(file, crop);
       setReviewPreview((prev) => {
         if (prev) URL.revokeObjectURL(prev);
         return URL.createObjectURL(cropped);
@@ -246,18 +224,18 @@ export default function Intake() {
             <Card>
               <CardHeader>
                 <CardEyebrow>3 · Canvas</CardEyebrow>
-                <CardTitle>Size follows your crop</CardTitle>
+                <CardTitle>Canvas size</CardTitle>
+                <Input label="Width (cm)" type="number" min="6" value={canvasW} onChange={e => setCanvasW(Math.max(6, Number(e.target.value)))} />
+                <Input label="Height (cm)" type="number" min="6" value={canvasH} onChange={e => setCanvasH(Math.max(6, Number(e.target.value)))} />
               </CardHeader>
               <div className="flex items-baseline gap-3">
                 <span className="font-display font-black text-display-sm text-text-on-light">
-                  {derivedCm ? `${derivedCm.w} × ${derivedCm.h}` : '— × —'}
+                  {`${canvasW} × ${canvasH}`}
                 </span>
                 <span className="pl-label text-text-on-light-muted">cm</span>
               </div>
               <p className="text-text-on-light-muted text-sm mt-1">
-                {file
-                  ? 'Auto-set from the cropped photo at 300 DPI. Resize the crop frame to change it.'
-                  : 'Drop a photo to see its canvas size.'}
+                Includes a 2.5 cm white border on every side.
               </p>
               <div className="mt-4">
                 <Input
