@@ -25,7 +25,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     brightness: [0.5, 1.5],
     contrast: [0.5, 1.5],
     saturation: [0, 2],
-    fontSize: [6, 48],
+    fontSize: [11, 25],
     strokeWidth: [0.1, 5],
   };
   for (const [key, [min, max]] of Object.entries(ranges)) {

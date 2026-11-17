@@ -1,3 +1,4 @@
+import { relativeNumberSize, NUMBER_FONT } from '../../src/lib/numberSize';
 export type RGB = [number, number, number];
 
 export interface CachedFacet {
@@ -38,7 +39,7 @@ export function renderSvgCached(
   const xmlns = 'http://www.w3.org/2000/svg';
   const svgWidth = sizeMultiplier * segmentation.width;
   const svgHeight = sizeMultiplier * segmentation.height;
-  let svg = `<?xml version="1.0" standalone="no"?>\n<svg width="${svgWidth}" height="${svgHeight}" viewBox="0 0 ${svgWidth} ${svgHeight}" xmlns="${xmlns}">`;
+  let svg = `<?xml version="1.0" standalone="no"?>\n<svg width="${svgWidth}" height="${svgHeight}" data-number-size="${fontSize}" viewBox="0 0 ${svgWidth} ${svgHeight}" xmlns="${xmlns}">`;
 
   if (backgroundImageBase64) {
     svg += `\n<image href="data:image/png;base64,${backgroundImageBase64}" x="0" y="0" width="${svgWidth}" height="${svgHeight}" opacity="1.0" style="pointer-events: none;" />`;
@@ -74,7 +75,7 @@ export function renderSvgCached(
       const oy = f.labelBounds.minY * sizeMultiplier;
       const lw = f.labelBounds.width * sizeMultiplier;
       const lh = f.labelBounds.height * sizeMultiplier;
-      const computedFontSize = fontSize;
+      const computedFontSize = relativeNumberSize(fontSize, lw, lh, String(f.color).length);
 
       // Center coords inside the bounds
       const cx = ox + lw / 2;
@@ -82,7 +83,7 @@ export function renderSvgCached(
 
       labels +=
         `<g class="label" data-facetId="${f.id}" data-color-index="${f.color}" transform="translate(${cx},${cy})">` +
-        `<text x="0" y="0" font-family="Arial, sans-serif" font-weight="600" stroke="white" stroke-width="${Math.max(2, computedFontSize * 0.22)}" stroke-linejoin="round" paint-order="stroke fill" font-size="${computedFontSize}" dominant-baseline="middle" text-anchor="middle" fill="${fontColor}">${f.color}</text>` +
+        `<text x="0" y="0" font-family="${NUMBER_FONT}" font-weight="300" stroke="none" data-label-width="${lw}" data-label-height="${lh}" font-size="${computedFontSize}" dominant-baseline="middle" text-anchor="middle" fill="${fontColor}">${f.color}</text>` +
         `</g>`;
     }
   }

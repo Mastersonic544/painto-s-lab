@@ -1,3 +1,10 @@
+import {
+  DEFAULT_NUMBER_SIZE,
+  MIN_NUMBER_SIZE,
+  MAX_NUMBER_SIZE,
+  NUMBER_FONT,
+  relativeNumberSize,
+} from '../lib/numberSize';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import Button from '../components/ui/Button';
@@ -130,7 +137,7 @@ function ReviewArea(props: {
   const [feedback, setFeedback] = useState<string | null>(null);
   const [requeueCount, setRequeueCount] = useState(props.colorCount);
   const [strokeWidth, setStrokeWidth] = useState(1.0);
-  const [numberSize, setNumberSize] = useState(18);
+  const [numberSize, setNumberSize] = useState(DEFAULT_NUMBER_SIZE);
   const [detail, setDetail] = useState(props.settings?.detail ?? 50);
   const [brightness, setBrightness] = useState(props.settings?.brightness ?? 1);
   const [contrast, setContrast] = useState(props.settings?.contrast ?? 1);
@@ -183,8 +190,11 @@ function ReviewArea(props: {
               ?.match(/stroke-width:\s*([\d.]+)/)?.[1] ?? '1',
           );
           const size = Math.max(
-            6,
-            Math.min(48, Number(doc.querySelector('text')?.getAttribute('font-size') ?? 18)),
+            MIN_NUMBER_SIZE,
+            Math.min(
+              MAX_NUMBER_SIZE,
+              Number(doc.documentElement.getAttribute('data-number-size') ?? DEFAULT_NUMBER_SIZE),
+            ),
           );
           setStrokeWidth(width);
           setNumberSize(size);
@@ -221,12 +231,32 @@ function ReviewArea(props: {
         p.style.strokeLinejoin = 'round';
       });
       for (const root of [filled, outline])
+        root?.querySelector('svg')?.setAttribute('data-number-size', String(numberSize));
+      for (const root of [filled, outline])
         root?.querySelectorAll<SVGTextElement>('g.label text').forEach((text) => {
-          text.setAttribute('font-size', String(numberSize));
-          text.setAttribute('stroke', 'white');
-          text.setAttribute('stroke-width', String(Math.max(2, numberSize * 0.22)));
-          text.setAttribute('paint-order', 'stroke fill');
-          text.setAttribute('stroke-linejoin', 'round');
+          const facetId = text.closest('g.label')?.getAttribute('data-facetId');
+          const path = root?.querySelector<SVGPathElement>(`path[data-facetId="${facetId}"]`);
+          const bounds = path?.getBBox();
+          const width = Number(
+            text.getAttribute('data-label-width') ?? bounds?.width ?? numberSize * 3,
+          );
+          const height = Number(
+            text.getAttribute('data-label-height') ?? bounds?.height ?? numberSize * 3,
+          );
+          text.setAttribute('data-label-width', String(width));
+          text.setAttribute('data-label-height', String(height));
+          text.setAttribute(
+            'font-size',
+            String(relativeNumberSize(numberSize, width, height, text.textContent?.length ?? 1)),
+          );
+          text.setAttribute('font-family', NUMBER_FONT);
+          text.setAttribute('font-weight', '300');
+          text.style.removeProperty('font-weight');
+          text.style.removeProperty('stroke');
+          text.setAttribute('stroke', 'none');
+          text.removeAttribute('stroke-width');
+          text.removeAttribute('paint-order');
+          text.removeAttribute('stroke-linejoin');
         });
       filled?.querySelectorAll<SVGPathElement>('path[data-facetId]').forEach((p) => {
         if (p.style.fill !== 'none') {
@@ -724,8 +754,8 @@ function ReviewArea(props: {
             <StudioRange
               label="Number size"
               value={numberSize}
-              min={6}
-              max={48}
+              min={MIN_NUMBER_SIZE}
+              max={MAX_NUMBER_SIZE}
               display={`${Math.round(numberSize)} px`}
               onChange={(v) => {
                 setNumberSize(v);
@@ -733,7 +763,7 @@ function ReviewArea(props: {
               }}
             />
             <p className="text-sm text-text-on-light-muted">
-              Lines and numbers update instantly, with a white halo around every number.
+              Numbers adapt to the space inside each region. Adjust the base size from 11 to 25 px.
             </p>
             <div className="border-t-2 border-ink-900 pt-4 flex flex-col gap-5">
               <StudioRange
@@ -1051,9 +1081,7 @@ const styleSheet = `
 }
 g.label[data-pl-selected="true"] text {
   fill: var(--mustard) !important;
-  stroke: var(--ink-900);
-  stroke-width: 1px;
-  paint-order: stroke fill;
+  stroke: none;
 }
 ` as const;
 

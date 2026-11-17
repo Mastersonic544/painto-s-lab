@@ -1,3 +1,4 @@
+import { relativeNumberSize, MIN_NUMBER_SIZE, MAX_NUMBER_SIZE } from '../src/lib/numberSize';
 import assert from 'node:assert/strict';
 import { createCanvas } from 'canvas';
 import { generatePaintByNumbers } from './generate';
@@ -50,7 +51,14 @@ async function main() {
       /stroke-width:0.5px/,
       'fill sealing is independent of outline thickness',
     );
-    assert.match(simple.outlineSvg, /stroke="white".*paint-order="stroke fill"/);
+    assert.doesNotMatch(simple.outlineSvg, /stroke="white"|font-weight="600"/);
+    assert.match(simple.outlineSvg, /font-weight="300" stroke="none"/);
+    assert.equal(MIN_NUMBER_SIZE, 11);
+    assert.equal(MAX_NUMBER_SIZE, 25);
+    assert.ok(relativeNumberSize(18, 30, 30, 2) < relativeNumberSize(18, 80, 80, 2));
+    assert.ok(relativeNumberSize(11, 54, 54, 2) < relativeNumberSize(25, 54, 54, 2));
+    assert.ok(relativeNumberSize(25, 10, 10, 2) <= (10 * 0.8) / 1.12);
+    assert.equal(relativeNumberSize(25, 1000, 1000, 1), 25);
     assert.ok(
       simple.outlineSvg.lastIndexOf('<path ') < simple.outlineSvg.indexOf('<g class="label"'),
       'all numbers render above all region borders',
@@ -72,7 +80,7 @@ async function main() {
       'source adjustments affect generated output',
     );
     originalLog(
-      'Studio regression checks passed: thin outlines, halos, layering, simplification, cache parity, source adjustment, determinism.',
+      'Studio regression checks passed: thin outlines, borderless light labels, relative sizing, layering, simplification, cache parity, source adjustment, determinism.',
     );
   } finally {
     console.log = originalLog;

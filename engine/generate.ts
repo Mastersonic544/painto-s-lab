@@ -1,3 +1,4 @@
+import { relativeNumberSize, NUMBER_FONT } from '../src/lib/numberSize';
 // =============================================================
 // Painto's Lab — wrapper around drake7707/paintbynumbersgenerator
 // Mirrors the upstream CLI pipeline (see src-cli/main.ts) but
@@ -610,7 +611,7 @@ function renderSvg(
   // viewBox is essential: without it the SVG won't scale to its display size
   // (CSS width/height just clips it), so consumers only see a corner of the
   // full-resolution drawing.
-  let svg = `<?xml version="1.0" standalone="no"?>\n<svg width="${svgWidth}" height="${svgHeight}" viewBox="0 0 ${svgWidth} ${svgHeight}" xmlns="${xmlns}">`;
+  let svg = `<?xml version="1.0" standalone="no"?>\n<svg width="${svgWidth}" height="${svgHeight}" data-number-size="${fontSize}" viewBox="0 0 ${svgWidth} ${svgHeight}" xmlns="${xmlns}">`;
 
   if (backgroundImageBase64) {
     svg += `\n<image href="data:image/png;base64,${backgroundImageBase64}" x="0" y="0" width="${svgWidth}" height="${svgHeight}" opacity="1.0" style="pointer-events: none;" />`;
@@ -660,7 +661,7 @@ function renderSvg(
       const oy = f.labelBounds.minY * sizeMultiplier;
       const lw = f.labelBounds.width * sizeMultiplier;
       const lh = f.labelBounds.height * sizeMultiplier;
-      const computedFontSize = fontSize;
+      const computedFontSize = relativeNumberSize(fontSize, lw, lh, String(f.color).length);
 
       // Center coords inside the bounds
       const cx = ox + lw / 2;
@@ -668,7 +669,7 @@ function renderSvg(
 
       labels +=
         `<g class="label" data-facetId="${f.id}" data-color-index="${f.color}" transform="translate(${cx},${cy})">` +
-        `<text x="0" y="0" font-family="Arial, sans-serif" font-weight="600" stroke="white" stroke-width="${Math.max(2, computedFontSize * 0.22)}" stroke-linejoin="round" paint-order="stroke fill" font-size="${computedFontSize}" dominant-baseline="middle" text-anchor="middle" fill="${fontColor}">${f.color}</text>` +
+        `<text x="0" y="0" font-family="${NUMBER_FONT}" font-weight="300" stroke="none" data-label-width="${lw}" data-label-height="${lh}" font-size="${computedFontSize}" dominant-baseline="middle" text-anchor="middle" fill="${fontColor}">${f.color}</text>` +
         `</g>`;
     }
   }

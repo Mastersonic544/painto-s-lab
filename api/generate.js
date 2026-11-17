@@ -156,6 +156,18 @@ function getAdmin(uid) {
   };
 }
 
+// src/lib/numberSize.ts
+var DEFAULT_NUMBER_SIZE = 18;
+var MIN_NUMBER_SIZE = DEFAULT_NUMBER_SIZE - 7;
+var MAX_NUMBER_SIZE = DEFAULT_NUMBER_SIZE + 7;
+var NUMBER_FONT = "Helvetica Neue, Segoe UI, Arial, sans-serif";
+function relativeNumberSize(baseSize, width, height, digits) {
+  const base = Math.max(MIN_NUMBER_SIZE, Math.min(MAX_NUMBER_SIZE, baseSize));
+  const relative = base * Math.sqrt(Math.max(0, width * height)) / (DEFAULT_NUMBER_SIZE * 3);
+  const target = Math.max(MIN_NUMBER_SIZE, Math.min(MAX_NUMBER_SIZE, relative));
+  return Math.max(1, Math.min(target, width * 0.8 / (Math.max(1, digits) * 0.56), height * 0.8));
+}
+
 // engine/generate.ts
 import * as nodeCanvas from "canvas";
 
@@ -2576,7 +2588,7 @@ function renderSvg(facetResult, colorsByIndex, sizeMultiplier, fill2, stroke, ad
   const svgWidth = sizeMultiplier * facetResult.width;
   const svgHeight = sizeMultiplier * facetResult.height;
   let svg = `<?xml version="1.0" standalone="no"?>
-<svg width="${svgWidth}" height="${svgHeight}" viewBox="0 0 ${svgWidth} ${svgHeight}" xmlns="${xmlns}">`;
+<svg width="${svgWidth}" height="${svgHeight}" data-number-size="${fontSize}" viewBox="0 0 ${svgWidth} ${svgHeight}" xmlns="${xmlns}">`;
   if (backgroundImageBase64) {
     svg += `
 <image href="data:image/png;base64,${backgroundImageBase64}" x="0" y="0" width="${svgWidth}" height="${svgHeight}" opacity="1.0" style="pointer-events: none;" />`;
@@ -2612,10 +2624,10 @@ function renderSvg(facetResult, colorsByIndex, sizeMultiplier, fill2, stroke, ad
       const oy = f.labelBounds.minY * sizeMultiplier;
       const lw = f.labelBounds.width * sizeMultiplier;
       const lh = f.labelBounds.height * sizeMultiplier;
-      const computedFontSize = fontSize;
+      const computedFontSize = relativeNumberSize(fontSize, lw, lh, String(f.color).length);
       const cx = ox + lw / 2;
       const cy = oy + lh / 2;
-      labels += `<g class="label" data-facetId="${f.id}" data-color-index="${f.color}" transform="translate(${cx},${cy})"><text x="0" y="0" font-family="Arial, sans-serif" font-weight="600" stroke="white" stroke-width="${Math.max(2, computedFontSize * 0.22)}" stroke-linejoin="round" paint-order="stroke fill" font-size="${computedFontSize}" dominant-baseline="middle" text-anchor="middle" fill="${fontColor}">${f.color}</text></g>`;
+      labels += `<g class="label" data-facetId="${f.id}" data-color-index="${f.color}" transform="translate(${cx},${cy})"><text x="0" y="0" font-family="${NUMBER_FONT}" font-weight="300" stroke="none" data-label-width="${lw}" data-label-height="${lh}" font-size="${computedFontSize}" dominant-baseline="middle" text-anchor="middle" fill="${fontColor}">${f.color}</text></g>`;
     }
   }
   svg += labels + `</svg>`;
@@ -2812,7 +2824,7 @@ async function handler(req, res) {
     brightness: [0.5, 1.5],
     contrast: [0.5, 1.5],
     saturation: [0, 2],
-    fontSize: [6, 48],
+    fontSize: [11, 25],
     strokeWidth: [0.1, 5]
   };
   for (const [key, [min, max]] of Object.entries(ranges)) {
